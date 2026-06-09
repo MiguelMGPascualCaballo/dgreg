@@ -90,8 +90,8 @@ cert_residuals.py   cert_det_post.py
 - `make_symbolic_context` - the field $K$ and ring $K[[x]]$.
 - `default_parameter_matrices`, `specialize_terms` - the specialized coefficient
   vectors `term_pp` $=(c^p_i)$, `term_qq` $=(c^q_j)$.
-- `local_coeffs_at_m1`, `local_coeffs_at_00` - the Fuchsian normal-form
-  coefficients $p,q$ and affine forcings $A_1,A_2$ at $z=-1$ and $z=0$
+- `local_coeffs_at_m1`, `local_coeffs_at_0m` - the Fuchsian normal-form
+  coefficients $p,q$ and affine forcings $A_1,A_2$ of $z=x-1$ and $z=-x$ at $x=0$
   (`eq:op-m1`, `eq:op-00`).
 - `hom_sol_fro_const` - Frobenius series, recurrences `rec:0`/`rec:1`. The
   argument `sol_order=N0` stops the recursion at the truncation order (exact for
@@ -104,7 +104,7 @@ cert_residuals.py   cert_det_post.py
   `def:Fphol0`).
 - `symbolic_matrix_A` - assembles $M_{\lambda,\theta}=A_{-1}-A_{0}$ (Definition
   `def:Mat`).
-- `_apply_operator_r` - the defect $D=G-\mathcal L_r[\tilde f]$ behind the
+- `_apply_operator_r` - the defect $D=G-\mathcal L_r[f^{\rm ap}]$ behind the
   residual (`def:appB:R`).
 
 **`cert_residuals.py`** - exact residual series.

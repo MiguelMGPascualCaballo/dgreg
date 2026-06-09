@@ -4,8 +4,6 @@ from sage.all import *
 # SageMath base routines: Frobenius solver, local expansions, matrix constructor,
 # and residual computation for the computer-assisted proof.
 #
-# Extracted from the original notebook.
-#
 # Everything here is exact over K = Frac(QQ[the, lam]) (or Frac(QQ[the]) when
 # lambda is fixed). No ball arithmetic enters this file; that is deferred to
 # cert_eval.py.
@@ -50,7 +48,6 @@ def make_symbolic_context(N, lam_value=None):
         "x": x,
         "the": the_K,
         "lam": lam_K,
-        "is_ball": False,
         "lam_fixed": lam_value is not None,
     }
 
@@ -80,12 +77,12 @@ def default_parameter_matrices(ctx):
     return pp, qq, a1, a2
 
 
-def specialize_terms(pp, qq, a1, a2, th, lam):
-    K = parent(th)
-    v_pp = vector(K, [1, lam, th])
-    v_qq = vector(K, [1, th, lam * th, th**2])
-    v_a  = vector(K, [1, th, th**2])
-    return pp * v_pp, qq * v_qq, a1 * v_a, a2 * v_a
+def specialize_terms(pp, qq, a1, a2, the, lam):
+    K = parent(the)
+    v_pp = vector(K, [1, lam, the])
+    v_qq = vector(K, [1, the, lam * the, the**2])
+    v_aa  = vector(K, [1, the, the**2])
+    return pp * v_pp, qq * v_qq, a1 * v_aa, a2 * v_aa
 
 
 # -----------------------------------------------------------------------------
@@ -97,12 +94,13 @@ def trunc_series_from_expr(R, expr):
 
 
 def coeffs(series, N):
-    return [series[i] for i in range(N + 1)]
+    return [series[kk] for kk in range(N + 1)]
 
 
 def local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
     z = -1 + x
+
     P = term_pp[2] + x * (term_pp[0] / z + term_pp[1] / (z - 1))
     Q = term_qq[3] * x + x**2 * (
         term_qq[0] / z + term_qq[1] / (z**2) + term_qq[2] / (z - 1)
@@ -113,6 +111,7 @@ def local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2):
     A2 = term_a2[3] * x + x**2 * (
         term_a2[0] / z + term_a2[1] / (z**2) + term_a2[2] / (z - 1)
     )
+
     P  = trunc_series_from_expr(R, P)
     Q  = trunc_series_from_expr(R, Q)
     A1 = trunc_series_from_expr(R, A1)
@@ -120,33 +119,23 @@ def local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2):
     return coeffs(P, N), coeffs(Q, N), coeffs(A1, N), coeffs(A2, N)
 
 
-def local_coeffs_at_00(ctx, term_pp, term_qq, term_a1, term_a2, variable="minus_z"):
+def local_coeffs_at_0m(ctx, term_pp, term_qq, term_a1, term_a2):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    K = ctx["K"]
-    if variable == "minus_z":
-        z = -x
-        sign_p = K(-1)
-        sign_z = K(-1)
-    elif variable == "z":
-        z = x
-        sign_p = K(1)
-        sign_z = K(1)
-    else:
-        raise ValueError("variable must be 'minus_z' or 'z'")
-    sign_ratio  = sign_p / sign_z
-    inv_sign_z  = K(1) / sign_z
-    P  = sign_ratio * term_pp[0] + x * sign_p * (
-        term_pp[1] / (z - K(1)) + term_pp[2] / (z + K(1))
+    z = -x    
+    
+    P  = term_pp[0] + z * (
+        term_pp[1] / (z - 1) + term_pp[2] / (z + 1)
     )
-    Q  = term_qq[1] + (term_qq[0] * inv_sign_z) * x + x**2 * (
-        term_qq[2] / (z - K(1)) + term_qq[3] / (z + K(1))
+    Q  = term_qq[1] + z * term_qq[0] + z**2 * (
+        term_qq[2] / (z - 1) + term_qq[3] / (z + 1)
     )
-    A1 = term_a1[1] + (term_a1[0] * inv_sign_z) * x + x**2 * (
-        term_a1[2] / (z - K(1)) + term_a1[3] / (z + K(1))
+    A1 = term_a1[1] + z * term_a1[0] + z**2 * (
+        term_a1[2] / (z - 1) + term_a1[3] / (z + 1)
     )
-    A2 = term_a2[1] + (term_a2[0] * inv_sign_z) * x + x**2 * (
-        term_a2[2] / (z - K(1)) + term_a2[3] / (z + K(1))
+    A2 = term_a2[1] + z * term_a2[0] + z**2 * (
+        term_a2[2] / (z - 1) + term_a2[3] / (z + 1)
     )
+
     P  = trunc_series_from_expr(R, P)
     Q  = trunc_series_from_expr(R, Q)
     A1 = trunc_series_from_expr(R, A1)
@@ -161,17 +150,17 @@ def local_coeffs_at_00(ctx, term_pp, term_qq, term_a1, term_a2, variable="minus_
 def series_from_coeffs(ctx, a):
     R, x = ctx["R"], ctx["x"]
     n = min(len(a), ctx["N"] + 1)
-    return sum(R.base_ring()(a[i]) * x**i for i in range(n)) + O(x**n)
+    return sum(R.base_ring()(a[kk]) * x**kk for kk in range(n)) + O(x**n)
 
 
 def integrate_regular(ctx, f):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    return sum(f[i] * x**(i + 1) / (i + 1) for i in range(N)) + O(x**(N + 1))
+    return sum(f[kk] * x**(kk + 1) / (kk + 1) for kk in range(N)) + O(x**(N + 1))
 
 
 def integ_factor_not_int(ctx, f, alpha):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    return sum(f[k] * x**k / (k - alpha) for k in range(N + 1)) + O(x**(N + 1))
+    return sum(f[kk] * x**kk / (kk - alpha) for kk in range(N + 1)) + O(x**(N + 1))
 
 
 # -----------------------------------------------------------------------------
@@ -182,8 +171,8 @@ def hom_sol_fro_const(ctx, r, P, Q, sol_order=None):
     # Frobenius series of the indicial root r, recurrence (rec:0)/(rec:1).
     #
     # sol_order=m computes only the coefficients 0..m-1 and leaves the rest zero.
-    # This is the order-N0 truncation f~ used by the matrix and the residual: the
-    # residual of f~ never reads coefficients beyond N0-1, so stopping the
+    # This is the order-N0 truncation f_approx used by the matrix and the residual: the
+    # residual of f_approx never reads coefficients beyond N0-1, so stopping the
     # recursion there is exact and avoids the costly high-order terms.
     K, R, x, N = ctx["K"], ctx["R"], ctx["x"], ctx["N"]
     top = N if sol_order is None else min(sol_order - 1, N)
@@ -206,16 +195,16 @@ def hom_sol_fro_const(ctx, r, P, Q, sol_order=None):
 
 def singular_integral(ctx, f, alpha):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    return sum(f[k] * x**(k + 1) / (k + 1 + alpha) for k in range(N)) + O(x**(N + 1))
+    return sum(f[kk] * x**(kk + 1) / (kk + 1 + alpha) for kk in range(N)) + O(x**(N + 1))
 
 
 def particular_sol_r1_is_0(ctx, psi1, psi2, aff, r):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
     term   = psi1 * psi2.derivative() - psi2 * psi1.derivative()
-    W_tilde = r * psi1 * psi2 + x * term
+    psiW = r * psi1 * psi2 + x * term
     aff_series  = series_from_coeffs(ctx, aff)
     aff_shift   = aff_series / x
-    aff_inv_W   = aff_shift / W_tilde
+    aff_inv_W   = aff_shift / psiW
     inte1 = psi1 * aff_inv_W
     inte2 = psi2 * aff_inv_W
     integral1 = singular_integral(ctx, inte1, -r)
@@ -240,9 +229,9 @@ def construct_solutions_when_diff_is_integer_formal(ctx, r1, differ_of_r, P, Q, 
     expo_analytic_term1 = analytic_term1.exp()
     psi  = expo_analytic_term1 / (phi1**2)
     primi = sum(
-        (psi[k] / (k - d)) * x**k
-        for k in range(N + 1)
-        if k != d
+        (psi[kk] / (kk - d)) * x**kk
+        for kk in range(N + 1)
+        if kk != d
     ) + O(x**(N + 1))
     C    = psi[d]
     phi2 = primi * phi1
@@ -276,24 +265,17 @@ def construct_solutions_when_diff_is_integer_formal(ctx, r1, differ_of_r, P, Q, 
 def analytic_value_and_derivative(ctx, f, x0):
     K, N = ctx["K"], ctx["N"]
     x0  = K(x0)
-    val = sum(f[i] * x0**i for i in range(N + 1))
-    der = sum(i * f[i] * x0**(i - 1) for i in range(1, N + 1))
+    val = sum(f[kk] * x0**kk for kk in range(N + 1))
+    der = sum(kk * f[kk] * x0**(kk - 1) for kk in range(1, N + 1))
     return vector(K, [val, der])
 
 
-def frobenius_value_and_derivative(ctx, phi, r, x0, include_frobenius_powers=None):
+def series_value_and_derivative(ctx, phi, x0):
     K, N = ctx["K"], ctx["N"]
     x0  = K(x0)
-    if include_frobenius_powers is None:
-        include_frobenius_powers = ctx.get("is_ball", False)
-    phi_val = sum(phi[i] * x0**i for i in range(N + 1))
-    phi_der = sum(i * phi[i] * x0**(i - 1) for i in range(1, N + 1))
-    if not include_frobenius_powers:
-        return vector(K, [phi_val, phi_der])
-    fac = x0**r
-    val = fac * phi_val
-    der = fac * (r * phi_val / x0 + phi_der)
-    return vector(K, [val, der])
+    phi_val = sum(phi[kk] * x0**kk for kk in range(N + 1))
+    phi_der = sum(kk * phi[kk] * x0**(kk - 1) for kk in range(1, N + 1))
+    return vector(K, [phi_val, phi_der])
 
 
 def get_analytic_from_m1(ctx, th, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)/2):
@@ -306,34 +288,34 @@ def get_analytic_from_m1(ctx, th, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)/
     fp1  = particular_sol_r1_is_0(ctx, psi1, psi2, A1, r2)
     fp2  = particular_sol_r1_is_0(ctx, psi1, psi2, A2, r2)
     xm1  = K(z0) + K(1)
-    Fh1  = frobenius_value_and_derivative(ctx, psi1, r1, xm1)
-    Fh2  = frobenius_value_and_derivative(ctx, psi2, r2, xm1)
+    Fh1  = series_value_and_derivative(ctx, psi1, xm1)
+    Ps2  = series_value_and_derivative(ctx, psi2, xm1)
     Fp1  = analytic_value_and_derivative(ctx, fp1, xm1)
     Fp2  = analytic_value_and_derivative(ctx, fp2, xm1)
-    return Fh1, Fh2, Fp1, Fp2
+    return Fh1, Ps2, Fp1, Fp2
 
 
-def get_analytic_from_00(ctx, th, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)/2):
+def get_analytic_from_00(ctx, the, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)/2):
     K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_00(
-        ctx, term_pp, term_qq, term_a1, term_a2, variable="minus_z"
+    P, Q, A1, A2 = local_coeffs_at_0m(
+        ctx, term_pp, term_qq, term_a1, term_a2
     )
-    r_big        = K(1) - th
+    r_big        = K(1) - the
     differ_of_r  = ZZ(2)
     phi1, phi2, fp1, fp2, C = construct_solutions_when_diff_is_integer_formal(
         ctx, r_big, differ_of_r, P, Q, A1, A2
     )
     x00 = -K(z0)
-    Fh1 = frobenius_value_and_derivative(ctx, phi1, r_big, x00)
-    Fh2 = frobenius_value_and_derivative(ctx, phi2, r_big - differ_of_r, x00)
+    Ps1 = series_value_and_derivative(ctx, phi1, x00)
+    Ps2 = series_value_and_derivative(ctx, phi2, x00)
     Fp1 = analytic_value_and_derivative(ctx, fp1, x00)
     Fp2 = analytic_value_and_derivative(ctx, fp2, x00)
     # Sign correction: x = -z, so d/dz = -d/dx
-    Fh1 = vector(K, [Fh1[0], -Fh1[1]])
-    Fh2 = vector(K, [Fh2[0], -Fh2[1]])
+    Ps1 = vector(K, [Ps1[0], -Ps1[1]])
+    Ps2 = vector(K, [Ps2[0], -Ps2[1]])
     Fp1 = vector(K, [Fp1[0], -Fp1[1]])
     Fp2 = vector(K, [Fp2[0], -Fp2[1]])
-    return Fh1, Fh2, Fp1, Fp2
+    return Ps1, Ps2, Fp1, Fp2
 
 
 # -----------------------------------------------------------------------------
@@ -391,8 +373,8 @@ def _apply_operator_r(ctx, f, r, P_coeffs, Q_coeffs, G_list=None):
     """
     Compute D = G - L_r[f] as a coefficient list.
 
-    For r=0: L_r = L = x^2 f'' + xP f' + Qf.
-    For r!=0: L_r[f] = x^2 f'' + (P+2r)x f' + (r(r-1)+rP+Q) f.
+    For r=0: L_r = L = x^2 f'' + xP f' + Qf.                   |
+    For r!=0: L_r[f] = x^2 f'' + (P+2r)x f' + (r(r-1)+rP+Q) f. | <- This branch is currently unused in the proof script.
     """
     K = ctx["K"]
     x = ctx["x"]
@@ -419,4 +401,4 @@ def _apply_operator_r(ctx, f, r, P_coeffs, Q_coeffs, G_list=None):
         G_ser = series_from_coeffs(ctx, G_list)
         D_ser = G_ser - Lf
 
-    return [D_ser[k] for k in range(N + 1)]
+    return [D_ser[kk] for kk in range(N + 1)]
