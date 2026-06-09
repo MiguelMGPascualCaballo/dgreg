@@ -20,7 +20,7 @@ from local_fuchs import (
     default_parameter_matrices,
     specialize_terms,
     local_coeffs_at_m1,
-    local_coeffs_at_00,
+    local_coeffs_at_0m,
     hom_sol_fro_const,
     particular_sol_r1_is_0,
     construct_solutions_when_diff_is_integer_formal,
@@ -90,8 +90,8 @@ def residuals_at_00(ctx, term_pp, term_qq, term_a1, term_a2, N0, th, sol_order=N
     the particular solutions are needed.
     """
     K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_00(
-        ctx, term_pp, term_qq, term_a1, term_a2, variable="minus_z"
+    P, Q, A1, A2 = local_coeffs_at_0m(
+        ctx, term_pp, term_qq, term_a1, term_a2
     )
     r1 = K(1) - th
     phi1, phi2, fp1, fp2, C = construct_solutions_when_diff_is_integer_formal(
