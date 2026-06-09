@@ -7,7 +7,7 @@ $$\det M_{\lambda,\theta} < 0 \quad\text{at } \lambda=\tfrac{56}{100},
 \qquad
 \det M_{\lambda,\theta} > 0 \quad\text{at } \lambda=\tfrac{60}{100},$$
 
-uniformly for $\theta\in[\tfrac13,\tfrac12]$. The sign change yields, by the
+uniformly for $\theta\in\big[\tfrac13,\tfrac12\big]$. The sign change yields, by the
 intermediate value theorem, an eigenvalue $\lambda_\theta\in(0.56,0.60)$ of
 $L_\theta$ (Corollary `cor:detzero`), and hence the linear instability of every
 excited state $-\sin(nx)$, $n\ge 2$ (Theorem `thm:eig`).
@@ -46,17 +46,19 @@ Internally, the labels `m1` and `00` refer to the singular points `z=-1` and
 2. **Certified numeric layer** (`cert_eval.py`, `cert_det_post.py`) - substitutes
    $(\theta,\lambda)$ as balls and assembles the certified enclosure of
    $\det M_{\lambda,\theta}$.
-3. **Drivers** (`cert_proof.py`) - certify the sign over all $\theta$ by adaptive
-   bisection, and run the prime-by-prime covering of every $n\ge2$.
+3. **Drivers** (`cert_proof.py`) - first run the prime-by-prime reduction, then
+   certify the remaining interval by adaptive bisection.
 
 Two parameter conventions used throughout the certified layer:
 
 * $\lambda$ is enclosed as a **thin** ball at each of the two endpoints
   $\tfrac{56}{100}, \tfrac{60}{100}$, never as an interval.
-* $\theta$ is enclosed as a ball (centre $\tfrac{5}{12}$, radius $\tfrac1{12}$
-  covers all of $[\tfrac13,\tfrac12]$) and **subdivided** by bisection: a single
-  ball over the whole range makes some coefficient denominators straddle a pole,
-  which is the trigger to refine.
+* $\theta$ is treated in two stages. First, for each prime $p<N$, the proof is
+  checked at the single point $\theta_p=h_p/p$. Then the remaining primes are
+  covered at once by the interval $J=[c\pm\tfrac1{2q}]$, where $q$ is the
+  smallest prime $\ge N$. Only this interval step is **subdivided** by
+  bisection, when a ball makes some coefficient denominator straddle a pole or
+  leaves the sign undecided.
 
 ### Dependency graph
 
@@ -87,7 +89,7 @@ cert_residuals.py   cert_det_post.py
 **`local_fuchs.py`** - exact symbolic engine.
 - `make_symbolic_context` - the field $K$ and ring $K[[x]]$.
 - `default_parameter_matrices`, `specialize_terms` - the specialized coefficient
-  vectors `term_pp` $=(c^p_i)$, `term_qq` $=(c^q_j)$.
+  vectors `term_pp` $=\big(c^p_i\big)$, `term_qq` $=\big(c^q_j\big)$.
 - `local_coeffs_at_m1`, `local_coeffs_at_00` - the Fuchsian normal-form
   coefficients $p,q$ and affine forcings $A_1,A_2$ at $z=-1$ and $z=0$
   (`eq:op-m1`, `eq:op-00`).
@@ -136,13 +138,13 @@ $\theta$-ball, via **Taylor models** in $t=\theta-\theta_{\mathrm{mid}}$ built
 from each entry's exact numerator/denominator (so the determinant cancellation
 happens in $\mathbb{Q}$, before intervals).
 - `delta_per_function` - per-`(point, branch, fn)` truncation bounds
-  $(\delta_f,\delta'_f)$, enclosed with the tight num/den magnitude
+  $\big(\delta_f,\delta'_f\big)$, enclosed with the tight num/den magnitude
   (`eval_series_tight`) to avoid interval wrapping.
 - `TM`, `_tm_det`, `_entry_tm` - the Taylor-model class, cofactor determinant,
   and per-entry model.
 - `_radius_matrix` - per-entry truncation radii, in the layout of
   `symbolic_matrix_A`.
-- `build_post` - the truncated symbolic matrix $\tilde M$ ($=$
+- `build_post` - the truncated symbolic matrix $M^{\rm ap}$ ($=$
   `symbolic_matrix_A(N0-1)`).
 - `certified_det_post` - the certified `RealBall` containing
   $\det M_{\lambda,\theta}$ for all $\theta$ in the ball: Taylor-model
@@ -157,7 +159,7 @@ happens in $\mathbb{Q}$, before intervals).
 - `prove(N, ...)` - the full theorem. Prime-divisor reduction (it suffices to
   treat prime $n$): primes $p<N$ are checked at the single point
   $\theta_p=h_p/p$; all primes $p\ge N$ are covered at once on the interval
-  $J=[c\pm\tfrac1{2q}]$ of length $1/q$, where $c$ is `center` and $q$ is the smallest prime
+  $J=\big[c\pm\tfrac1{2q}\big]$ of length $1/q$, where $c$ is `center` and $q$ is the smallest prime
   $\ge N$.
 
 ### Auxiliary (not needed for the proof)
@@ -171,10 +173,10 @@ happens in $\mathbb{Q}$, before intervals).
 
 | Name | Meaning | Default / constraint |
 |---|---|---|
-| `N0` | matching / truncation order of $\tilde f$ | $\ge 11$ (contraction needs $N_0\ge6$ at $z=0$, $N_0\ge11$ at $z=-1$) |
+| `N0` | matching / truncation order of $f^{\rm ap}$ | $\ge 11$ (contraction needs $N_0\ge6$ at $z=0$, $N_0\ge11$ at $z=-1$) |
 | `Nres` | residual order, $N_{\mathrm{res}}>N_0$ | $2N_0$ |
 | `bits` | `RealBallField` precision | `200` |
-| `rho` | Cauchy radius $\rho\in(\tfrac12,1)$ | $\tfrac34$ |
+| `rho` | Cauchy radius $\rho\in\big(\tfrac12,1\big)$ | $\tfrac34$ |
 | `b0` | local evaluation point ($z=x_0=-\tfrac12 \leftrightarrow x=\tfrac12$) | $\tfrac12$ |
 
 ## Notes on rigor
@@ -186,4 +188,4 @@ happens in $\mathbb{Q}$, before intervals).
   matrix.
 * The contraction constant $\ell$ uses the analytic sup-bounds of Lemmas
   `lem:sup:00` and `lem:sup:-1`, which are taken over the real interval
-  $x\in[0,\tfrac12]$.
+  $x\in\big[0,\tfrac12\big]$.
