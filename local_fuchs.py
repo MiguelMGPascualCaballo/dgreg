@@ -58,18 +58,21 @@ def make_symbolic_context(N, lam_value=None):
 # -----------------------------------------------------------------------------
 
 def default_parameter_matrices(ctx):
-    K = ctx["K"]
+    K = ctx["K"]       # Below, t denotes the and l lambda
     pp = matrix(K, [
-        [ 1,  0,  2],
-        [-1, -1,  0],
-        [-1,  1,  0],
+    #     1   l   t
+        [ 1,  0,  2],       # 1/z
+        [-1, -1,  0],       # 1/(z-1)
+        [-1,  1,  0],       # 1/(z+1)
     ])
     qq = matrix(K, [
-        [ 0,  0,  2,  0],
-        [-1,  0,  0,  1],
-        [ 1, -1, -1,  0],
-        [-1,  1, -1,  0],
+    #     1   t t*l t^2
+        [ 0,  0,  2,  0],   # 1/z
+        [-1,  0,  0,  1],   # 1/z^2
+        [ 1, -1, -1,  0],   # 1/(z-1)
+        [-1,  1, -1,  0],   # 1/(z+1)
     ])
+    # 1/z 1/z^2 1/(z-1) 1/(z+1) and 1 t t^2
     a1 = matrix(K, [[ 2], [ 0], [-1], [-1]]) \
         * matrix(K, [[0, 2, -1]]) * K(1)/K(2)
     a2 = matrix(K, [[ 0], [ 2], [-1], [ 1]]) \
@@ -101,6 +104,8 @@ def local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
     z = -1 + x
 
+    # term_pp: [coeff_1/z, coeff_1/(z-1), coeff_1/(z+1)]
+    # term_qq / term_a1 / term_a2: [coeff_1/z, coeff_1/z^2, coeff_1/(z-1), coeff_1/(z+1)]
     P = term_pp[2] + x * (term_pp[0] / z + term_pp[1] / (z - 1))
     Q = term_qq[3] * x + x**2 * (
         term_qq[0] / z + term_qq[1] / (z**2) + term_qq[2] / (z - 1)
@@ -123,6 +128,8 @@ def local_coeffs_at_0m(ctx, term_pp, term_qq, term_a1, term_a2):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
     z = -x    
     
+    # term_pp: [coeff_1/z, coeff_1/(z-1), coeff_1/(z+1)]
+    # term_qq / term_a1 / term_a2: [coeff_1/z, coeff_1/z^2, coeff_1/(z-1), coeff_1/(z+1)]
     P  = term_pp[0] + z * (
         term_pp[1] / (z - 1) + term_pp[2] / (z + 1)
     )
@@ -199,10 +206,13 @@ def singular_integral(ctx, f, alpha):
 
 
 def particular_sol_r1_is_0(ctx, psi1, psi2, aff, r):
-    R, x, N = ctx["R"], ctx["x"], ctx["N"]
+    K, R, x, N = ctx["K"], ctx["R"], ctx["x"], ctx["N"]
     term   = psi1 * psi2.derivative() - psi2 * psi1.derivative()
     psiW = r * psi1 * psi2 + x * term
     aff_series  = series_from_coeffs(ctx, aff)
+    assert aff_series[0] == K(0), (
+        "right-hand side must vanish at x=0 for the Wronskian formula to produce a holomorphic result"
+    )
     aff_shift   = aff_series / x
     aff_inv_W   = aff_shift / psiW
     inte1 = psi1 * aff_inv_W
@@ -386,14 +396,7 @@ def _apply_operator_r(ctx, f, r, P_coeffs, Q_coeffs, G_list=None):
         Q_ser = series_from_coeffs(ctx, Q_coeffs)
         Lf = x**2 * f.derivative().derivative() + x * P_ser * f.derivative() + Q_ser * f
     else:
-        P_r_coeffs = [P_coeffs[0] + K(2) * r_K] + [P_coeffs[k] for k in range(1, N + 1)]
-        Q_r_coeffs = (
-            [r_K * (r_K - K(1)) + r_K * P_coeffs[0] + Q_coeffs[0]]
-            + [r_K * P_coeffs[k] + Q_coeffs[k] for k in range(1, N + 1)]
-        )
-        P_r = series_from_coeffs(ctx, P_r_coeffs)
-        Q_r = series_from_coeffs(ctx, Q_r_coeffs)
-        Lf = x**2 * f.derivative().derivative() + x * P_r * f.derivative() + Q_r * f
+        raise NotImplementedError("r != 0 path is not part of the certified proof")
 
     if G_list is None:
         D_ser = -Lf

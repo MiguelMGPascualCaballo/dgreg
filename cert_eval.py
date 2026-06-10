@@ -32,12 +32,10 @@ def make_balls(bits, theta_mid, theta_rad, lam_value, lam_rad):
 
 def _eval_poly(poly, the_b, lam_b, RB):
     """
-    Enclose a polynomial in QQ[the] or QQ[the, lam] at (the_b, lam_b).
+    Evaluate a polynomial in QQ[the] or QQ[the, lam] at ball values.
 
-    Uses Sage's polynomial __call__, i.e. Horner's rule, which gives a much tighter
-    interval enclosure than the expanded term-by-term sum (the powers the_b^e are
-    nested instead of summed independently).  This is what keeps a denominator from
-    spuriously straddling 0 over a theta-ball.
+    Uses Sage's polynomial evaluation instead of an explicit expanded
+    term-by-term interval sum, in one variable uses Horner's rule.
     """
     if poly.parent().ngens() == 2:
         return RB(poly(the_b, lam_b))
@@ -75,7 +73,9 @@ def L_bound(point, N0):
     Contraction constant ell of (appB:L) from the analytic sup-bounds:
         z=0   ||p|| < 4,  ||x p' - p - q|| < 8   ->  ell <= 4/N0 + 8/(N0(N0-1))
         z=-1  ||p|| <= 8, ||x p' - p - q|| <= 24 ->  ell <= 8/N0 + 24/(N0(N0-1)).
-    Uniform in (theta, lambda), so this is an exact rational, no ball needed.
+    Valid for theta in (0, 1) and lambda in {56/100, 60/100}, which is the
+    parameter domain used in the proof. On that domain the bound is uniform, so
+    this is an exact rational and no ball is needed for it.
     """
     if point == "00":
         c1, c2 = QQ(4), QQ(8)       # valid for N0 >= 6
@@ -87,7 +87,7 @@ def L_bound(point, N0):
 
 
 # -----------------------------------------------------------------------------
-# Cauchy sup-bounds M_p(rho), M_q(rho)  (Lemmas lem:sup:Mbound:m1, lem:tails:Mbound:00)
+# Cauchy sup-bounds M_p(rho), M_q(rho)  (Lemmas lem:cau:Mbound:m1, lem:cau:Mbound:00)
 # -----------------------------------------------------------------------------
 
 def rational_M_m1(cp, cq, rho):
@@ -129,12 +129,12 @@ def norm_deriv(xi_RB, N0, Nres, b0):
     return s
 
 
-def ftilde_norms(ftilde_RB, rho):
-    """C_val = sum_m |f~_m| rho^m and C_der = sum_m m |f~_m| rho^m (Lemma lem:tails:xi)."""
+def fapprox_norms(fapprox_RB, rho):
+    """C_val = sum_m |f^ap_m| rho^m and C_der = sum_m m |f^ap_m| rho^m (Lemma lem:tails:xi)."""
     RB = rho.parent()
     C_val = RB(0)
     C_der = RB(0)
-    for m, fm in enumerate(ftilde_RB):
+    for m, fm in enumerate(fapprox_RB):
         term = abs(fm) * rho**m
         C_val += term
         C_der += RB(m) * term
@@ -160,14 +160,14 @@ def xi_tails(Mp, Mq, C_val, C_der, N0, Nres, b0, rho):
 # delta, delta' per function
 # -----------------------------------------------------------------------------
 
-def delta_block(point, xi_RB, ftilde_RB, Mp, Mq, N0, Nres, b0, rho):
+def delta_block(point, xi_RB, fapprox_RB, Mp, Mq, N0, Nres, b0, rho):
     """Per-function (delta_val, delta_der, ell) from (appB:Linfbound)/(appB:Eprimebound), M=b0."""
     RB = b0.parent()
     ell = RB(L_bound(point, N0))
     if not (ell < 1):
         raise ValueError("contraction ell < 1 not certified at %s (N0=%d): ell = %s"
                          % (point, N0, ell))
-    C_val, C_der = ftilde_norms(ftilde_RB, rho)
+    C_val, C_der = fapprox_norms(fapprox_RB, rho)
     tail_val, tail_der = xi_tails(Mp, Mq, C_val, C_der, N0, Nres, b0, rho)
     nR  = norm_AN0(xi_RB, N0, Nres, b0) + tail_val
     nRp = norm_deriv(xi_RB, N0, Nres, b0) + tail_der
@@ -176,4 +176,3 @@ def delta_block(point, xi_RB, ftilde_RB, Mp, Mq, N0, Nres, b0, rho):
     delta_val = M**N0 * inv * nR
     delta_der = (RB(N0) * ell * M**(N0 - 1) * inv) * nR + nRp
     return delta_val, delta_der, ell
-

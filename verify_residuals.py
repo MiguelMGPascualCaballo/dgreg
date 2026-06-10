@@ -5,7 +5,7 @@ from sage.all import *
 # Sanity checks for the exact residual pipeline, in the spirit of BHTW's verify.py:
 # fail loudly, never silently.  A truncated power series forgets its tail, so the
 # point here is to confirm we really are carrying the intended number of terms of
-# every approximate solution f~ and of every residual xi.
+# every approximate solution f_approx and of every residual xi.
 
 from cert_residuals import all_res_sym
 
@@ -13,7 +13,7 @@ MATRIX_FUNCS = {"m1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
 
 
 def check_term_counts(all_res):
-    """We compute exactly N0 terms of each f~, and the full N0..Nres band of xi."""
+    """We compute exactly N0 terms of each f^ap, and the full N0..Nres band of xi."""
     N0, Nres = all_res["_N0"], all_res["_Nres"]
 
     for point in ["m1", "00"]:
@@ -28,14 +28,14 @@ def check_term_counts(all_res):
                         % (point, branch, fn, len(blk[fn]), Nres + 1)
                     )
                 ###################################
-                # exactly N0 stored truncation coefficients f~_0..f~_{N0-1}
-                if len(blk["ftilde"][fn]) != N0:
+                # exactly N0 stored truncation coefficients f^ap_0..f^ap_{N0-1}
+                if len(blk["fapprox"][fn]) != N0:
                     raise ValueError(
-                        "ftilde[%s/%s/%s] has %d terms, expected N0=%d"
-                        % (point, branch, fn, len(blk["ftilde"][fn]), N0)
+                        "fapprox[%s/%s/%s] has %d terms, expected N0=%d"
+                        % (point, branch, fn, len(blk["fapprox"][fn]), N0)
                     )
 
-    print("OK  term counts: N0=%d terms of each f~, residual band N0..Nres = %d..%d"
+    print("OK  term counts: N0=%d terms of each f^ap, residual band N0..Nres = %d..%d"
           % (N0, N0, Nres))
 
 

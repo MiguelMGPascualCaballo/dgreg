@@ -111,9 +111,9 @@ cert_residuals.py   cert_det_post.py
 - `all_res_sym(Nres, N0, lam_value=None)` - for both singular points
   and both branches $\theta^\pm$, the residual coefficients $\xi_k$
   (`def:appB:R`) of each matrix function, exact in $(\theta,\lambda)$. Because
-  $\tilde f$ matches the solution to order $N_0$, $\xi_k=0$ for $k<N_0$ and is
-  supported on $N_0\le k\le N_{\mathrm{res}}$. Also stores `ftilde` (the
-  $\tilde f_m$), `term_pp`, `term_qq`.
+  $f^{\rm}$ matches the solution to order $N_0$, $\xi_k=0$ for $k<N_0$ and is
+  supported on $N_0\le k\le N_{\mathrm{res}}$. Also stores `f_approx` (the
+  $f^{\rm ap}_m$), `term_pp`, `term_qq`.
 
 **`cert_eval.py`** - ball substitution and certified norms (the only place
 intervals enter the norms).
@@ -125,8 +125,8 @@ intervals enter the norms).
   $\ell\le \tfrac8{N_0}+\tfrac{24}{N_0(N_0-1)}$ at $z=-1$. (No Cauchy tail is needed for
   $\ell$.)
 - `rational_M_m1`, `rational_M_00` - the Cauchy sup-bounds $M_p(\rho),M_q(\rho)$
-  (Lemmas `lem:sup:Mbound:m1`, `lem:tails:Mbound:00`).
-- `ftilde_norms` - $C_{\mathrm{val}}, C_{\mathrm{der}}$ (Lemma `lem:tails:xi`).
+  (Lemmas `lem:cau:Mbound:m1`, `lem:cau:Mbound:00`).
+- `fapprox_norms` - $C_{\mathrm{val}}, C_{\mathrm{der}}$ (Lemma `lem:tails:xi`).
 - `xi_tails` - the $k>N_{\mathrm{res}}$ Cauchy tails of the residual norms
   (Lemma `lem:tails:xi`).
 - `norm_AN0`, `norm_deriv` - the finite parts ($N_0\le k\le N_{\mathrm{res}}$) of
@@ -173,16 +173,20 @@ happens in $\mathbb{Q}$, before intervals).
 
 | Name | Meaning | Default / constraint |
 |---|---|---|
-| `N0` | matching / truncation order of $f^{\rm ap}$ | $\ge 11$ (contraction needs $N_0\ge6$ at $z=0$, $N_0\ge11$ at $z=-1$) |
+| `N0` | matching / truncation order of $f^{\rm ap}$ | Default: `31`; constraint: $N_0\ge 11$ at $z=-1$, $N_0\ge 6$ at $z=0$ |
 | `Nres` | residual order, $N_{\mathrm{res}}>N_0$ | $2N_0$ |
+| `N` | prime-split threshold | No function default; theorem run uses `900`, with $p^\ast=\texttt{next\_prime}(N-1)=907$ |
+| `center` | theta midpoint for point checks and interval $J$ | Default: $\tfrac{5}{12}$ |
 | `bits` | `RealBallField` precision | `200` |
 | `rho` | Cauchy radius $\rho\in\big(\tfrac12,1\big)$ | $\tfrac34$ |
 | `b0` | local evaluation point ($z=x_0=-\tfrac12 \leftrightarrow x=\tfrac12$) | $\tfrac12$ |
 
 ## Notes on rigor
 
-* The exact layer carries no intervals; substitution to `RealBallField` is the
-  single rigorous step, in `cert_eval.py` / `cert_det_post.py`.
+* The exact layer carries no intervals. Ball arithmetic enters in two places:
+  `cert_eval.py` computes the per-function truncation bounds
+  $(\delta_f,\delta'_f)$, and `cert_det_post.py` encloses the matrix entries and
+  determinant via Taylor models.
 * The proof uses the tight `certified_det_post` based on Taylor models and
   per-function bounds $(\delta_f,\delta'_f)$, propagated entry-wise to the
   matrix.

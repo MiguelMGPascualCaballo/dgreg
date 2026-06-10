@@ -22,7 +22,7 @@ from sage.all import *
 #
 # The determinant is then formed by Taylor-model arithmetic, so its t^0, t^1
 # coefficients (det and d/dtheta det) are tight -- the determinant cancellation is
-# done in the polynomial product.  The truncation gap M~ -> M_true is added in
+# done in the polynomial product.  The truncation gap M^ap -> M_true is added in
 # magnitude (Hadamard, per-entry radii); no derivative of the true solution, hence
 # no f_theta tail, is used.
 
@@ -35,14 +35,20 @@ from cert_eval import rational_M_m1, rational_M_00, delta_block
 # -----------------------------------------------------------------------------
 
 def _tpow(r, l, RB):
-    """Enclosure of t^l over |t| <= r: 1 for l=0, [-r^l, r^l] otherwise."""
+    """Enclosure of t^l over |t| <= r: 1 for l=0, [-r^l, r^l] for odd l and [0,r^l] otherwise."""
     if l == 0:
         return RB(1)
+    elif l % 2 == 0:
+        return RB([0,r**l])
     return RB(0).add_error((r**l).upper())
 
 
 class TM:
-    """Order-`order` Taylor model in t on |t| <= r, coefficients/remainder in RB."""
+    """
+    Order-`order` Taylor model in t on |t| <= r, coefficients/remainder in RB.
+
+    With order 1 represents functions as a0 + a1 t + I, first order approx + remainder.
+    """
 
     def __init__(self, a, I, r, order):
         self.a = list(a)
@@ -71,22 +77,22 @@ class TM:
 
     def __mul__(self, other):
         RB = self.I.parent()
-        k = self.order
+        kk = self.order
         r = self.r
         a, b = self.a, other.a
-        c = [RB(0)] * (k + 1)
+        c = [RB(0)] * (kk + 1)
         overflow = RB(0)
-        for i in range(k + 1):
-            for j in range(k + 1):
-                if i + j <= k:
-                    c[i + j] = c[i + j] + a[i] * b[j]
+        for ii in range(kk + 1):
+            for jj in range(kk + 1):
+                if ii + jj <= kk:
+                    c[ii + jj] = c[ii + jj] + a[ii] * b[jj]
                 else:
-                    overflow = overflow + a[i] * b[j] * _tpow(r, i + j, RB)
+                    overflow = overflow + a[ii] * b[jj] * _tpow(r, ii + jj, RB)
         newI = (overflow
                 + self._poly_enc() * other.I
                 + self.I * other._poly_enc()
                 + self.I * other.I)
-        return TM(c, newI, r, k)
+        return TM(c, newI, r, kk)
 
 
 def _tm_zero(r, order, RB):
@@ -99,10 +105,10 @@ def _tm_det(mat, r, order, RB):
     if n == 1:
         return mat[0][0]
     acc = _tm_zero(r, order, RB)
-    for j in range(n):
-        minor = [[mat[i][jj] for jj in range(n) if jj != j] for i in range(1, n)]
-        term = mat[0][j] * _tm_det(minor, r, order, RB)
-        acc = acc + term if (j % 2 == 0) else acc - term
+    for kk in range(n):
+        minor = [[mat[ii][jj] for jj in range(n) if jj != kk] for ii in range(1, n)]
+        term = mat[0][kk] * _tm_det(minor, r, order, RB)
+        acc = acc + term if (kk % 2 == 0) else acc - term
     return acc
 
 
@@ -221,7 +227,7 @@ def delta_per_function(all_res, bits, theta_mid, theta_rad, lam_value, lam_rad=0
             Mp, Mq = _RATIONAL_M[point](cp, cq, rho)
             for fn in _FN_KEYS[point]:
                 xi_RB = eval_series_tight(blk[fn], c, lam_value, r_rat, RB, Pt)
-                ft_RB = eval_series_tight(blk["ftilde"][fn], c, lam_value, r_rat, RB, Pt)
+                ft_RB = eval_series_tight(blk["fapprox"][fn], c, lam_value, r_rat, RB, Pt)
                 dv, dd, _ = delta_block(point, xi_RB, ft_RB, Mp, Mq, N0, Nres, b0, rho)
                 out[(point, branch, fn)] = (dv, dd)
     return out
@@ -253,7 +259,7 @@ def _radius_matrix(dpf, RB):
 # -----------------------------------------------------------------------------
 
 def build_post(N0, lam_value=None, order=1):
-    """Truncated symbolic matrix M~; order is echoed for the downstream det layer."""
+    """Truncated symbolic matrix M^ap; order is echoed for the downstream det layer."""
     Asym, _ = symbolic_matrix_A(N0 - 1, lam_value=lam_value)
     return Asym, order
 
