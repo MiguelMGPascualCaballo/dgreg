@@ -36,7 +36,7 @@ prove(50, N0=DEFAULT_N0)             # full theorem: all primes via points + int
 The proof separates the **exact symbolic** computation from the single step
 where **interval arithmetic** enters.
 
-Internally, the labels `m1` and `00` refer to the singular points `z=-1` and
+Internally, the labels `p1` and `00` refer to the singular points `z=+1` and
 `z=0`, while the branches `the` and `eht` correspond to `theta` and `1-theta`.
 
 1. **Exact symbolic layer** (`local_fuchs.py`, `cert_residuals.py`) - builds the
@@ -122,9 +122,9 @@ intervals enter the norms).
   honest).
 - `L_bound` - the contraction constant $\ell$ from the **analytic** sup-bounds
   (Lemmas `lem:sup:00`, `lem:sup:-1`): $\ell\le \tfrac4{N_0}+\tfrac8{N_0(N_0-1)}$ at $z=0$,
-  $\ell\le \tfrac8{N_0}+\tfrac{24}{N_0(N_0-1)}$ at $z=-1$. (No Cauchy tail is needed for
+  $\ell\le \tfrac8{N_0}+\tfrac{16}{N_0(N_0-1)}$ at $z=+1$. (No Cauchy tail is needed for
   $\ell$.)
-- `rational_M_m1`, `rational_M_00` - the Cauchy sup-bounds $M_p(\rho),M_q(\rho)$
+- `rational_M_p1`, `rational_M_00` - the Cauchy sup-bounds $M_p(\rho),M_q(\rho)$
   (Lemmas `lem:cau:Mbound:m1`, `lem:cau:Mbound:00`).
 - `fapprox_norms` - $C_{\mathrm{val}}, C_{\mathrm{der}}$ (Lemma `lem:tails:xi`).
 - `xi_tails` - the $k>N_{\mathrm{res}}$ Cauchy tails of the residual norms
@@ -173,7 +173,7 @@ happens in $\mathbb{Q}$, before intervals).
 
 | Name | Meaning | Default / constraint |
 |---|---|---|
-| `N0` | matching / truncation order of $f^{\rm ap}$ | Default: `31`; constraint: $N_0\ge 11$ at $z=-1$, $N_0\ge 6$ at $z=0$ |
+| `N0` | matching / truncation order of $f^{\rm ap}$ | Default: `31`; constraint: $N_0\ge 10$ at $z=+1$, $N_0\ge 6$ at $z=0$ |
 | `Nres` | residual order, $N_{\mathrm{res}}>N_0$ | $2N_0$ |
 | `N` | prime-split threshold | No function default; theorem run uses `900`, with $p^\ast=\texttt{next\_prime}(N-1)=907$ |
 | `center` | theta midpoint for point checks and interval $J$ | Default: $\tfrac{5}{12}$ |

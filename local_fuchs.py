@@ -18,8 +18,19 @@ from sage.all import *
 # Contexts
 # -----------------------------------------------------------------------------
 
-def make_symbolic_context(N, lam_value=None):
+def make_symbolic_context(N, lam_value=None, the_value=None, ball=None, bits=200):
     # Working field K and power-series ring R = K[[x]] truncated at order N.
+    #
+    # ball = (theta_ball, lam_ball): route-A "balls + dual number" context.  theta is
+    # an interval enclosing a theta-sub-ball of J, lambda = lam_ball + eps with
+    # eps^2 = 0 (a dual number), over K = RealBall[[eps]]/(eps^2).  The recursion is
+    # ring-generic (only +,-,*,/ and series ops, no numerator/gcd), so it runs over
+    # this ring directly: the eps^1 coefficient of any output is its EXACT
+    # d/dlambda enclosed over the whole lambda-interval (eps^2=0 is exact, so there is
+    # no Taylor remainder to bound), and the eps^0 coefficient is the value.  Both
+    # enclose over the theta-ball.  This is rigorous (interval enclosures) though
+    # looser than the exact build; it is the only route that gives d/dlambda det over
+    # a (theta,lambda) box without the bivariate-exact blow-up.
     #
     # lam_value=None keeps both theta and lambda symbolic, K = Frac(QQ[the, lam]).
     # Passing a rational lam_value fixes lambda and drops to the univariate field
@@ -28,7 +39,31 @@ def make_symbolic_context(N, lam_value=None):
     # The residuals are independent of lambda only through these coefficients, so
     # fixing it and looping over {56/100, 60/100} costs two cheap passes instead
     # of one expensive bivariate pass.
-    if lam_value is None:
+    #
+    # the_value (symmetric to lam_value): fixes THETA to a rational and keeps
+    # LAMBDA symbolic, K = Frac(QQ[lam]).  This is the cheap univariate-in-lambda
+    # pass used by the simplicity certificate (d/dlambda det at a fixed paper
+    # theta), avoiding the bivariate blow-up.
+    if ball is not None:
+        theta_ball, lam_ball = ball
+        RB = RealBallField(bits)
+        # dual numbers over balls: RBF[eps]/(eps^2).  Use a QUOTIENT ring (not a
+        # PowerSeriesRing): PSR over the field RBF lands in a class lacking
+        # _pseudo_fraction_field, which Sage calls when an inexact division is not
+        # recognized as exact (balls cannot confirm is_unit).  The quotient ring is
+        # not a field, so the outer R = PSR(K,'x') is the generic class that has it.
+        Bp = PolynomialRing(RB, names=("eps",))
+        (epsp,) = Bp.gens()
+        K = Bp.quotient(epsp**2, names=("eps",))
+        eps = K.gen()
+        B = K
+        the_K, lam_K = K(RB(theta_ball)), K(RB(lam_ball)) + eps
+    elif the_value is not None:
+        B = PolynomialRing(QQ, names=("lam",))
+        (lam,) = B.gens()
+        K = FractionField(B)
+        the_K, lam_K = K(QQ(the_value)), K(lam)
+    elif lam_value is None:
         B = PolynomialRing(QQ, names=("the", "lam"))
         the, lam = B.gens()
         K = FractionField(B)
@@ -49,6 +84,8 @@ def make_symbolic_context(N, lam_value=None):
         "the": the_K,
         "lam": lam_K,
         "lam_fixed": lam_value is not None,
+        "the_fixed": the_value is not None,
+        "ball": ball is not None,
     }
 
 
@@ -59,24 +96,26 @@ def make_symbolic_context(N, lam_value=None):
 
 def default_parameter_matrices(ctx):
     K = ctx["K"]       # Below, t denotes the and l lambda
+    # Partial-fraction data of the operator of def:PQtl, in the PHYSICAL +lambda
+    # convention: specialize_terms is called directly at lambda (no reflection).
     pp = matrix(K, [
     #     1   l   t
         [ 1,  0,  2],       # 1/z
-        [-1, -1,  0],       # 1/(z-1)
-        [-1,  1,  0],       # 1/(z+1)
+        [-1,  1,  0],       # 1/(z-1)
+        [-1, -1,  0],       # 1/(z+1)
     ])
     qq = matrix(K, [
     #     1   t t*l t^2
-        [ 0,  0,  2,  0],   # 1/z
+        [ 0,  0, -2,  0],   # 1/z
         [-1,  0,  0,  1],   # 1/z^2
-        [ 1, -1, -1,  0],   # 1/(z-1)
-        [-1,  1, -1,  0],   # 1/(z+1)
+        [ 1, -1,  1,  0],   # 1/(z-1)
+        [-1,  1,  1,  0],   # 1/(z+1)
     ])
     # 1/z 1/z^2 1/(z-1) 1/(z+1) and 1 t t^2
     a1 = matrix(K, [[ 2], [ 0], [-1], [-1]]) \
-        * matrix(K, [[0, 2, -1]]) * K(1)/K(2)
+        * matrix(K, [[0, 2, -1]]) * K(QQ(1)/QQ(2))
     a2 = matrix(K, [[ 0], [ 2], [-1], [ 1]]) \
-        * matrix(K, [[1, 0, -1]]) * K(1)/K(2)
+        * matrix(K, [[1, 0, -1]]) * K(QQ(1)/QQ(2))
     return pp, qq, a1, a2
 
 
@@ -100,21 +139,24 @@ def coeffs(series, N):
     return [series[kk] for kk in range(N + 1)]
 
 
-def local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2):
+def local_coeffs_at_p1(ctx, term_pp, term_qq, term_a1, term_a2):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    z = -1 + x
+    z = 1 + x
 
     # term_pp: [coeff_1/z, coeff_1/(z-1), coeff_1/(z+1)]
     # term_qq / term_a1 / term_a2: [coeff_1/z, coeff_1/z^2, coeff_1/(z-1), coeff_1/(z+1)]
-    P = term_pp[2] + x * (term_pp[0] / z + term_pp[1] / (z - 1))
-    Q = term_qq[3] * x + x**2 * (
-        term_qq[0] / z + term_qq[1] / (z**2) + term_qq[2] / (z - 1)
+    # Singular point z=+1: the local variable is (z-1)=x, so 1/(z-1) is the leading
+    # (indicial) term; 1/z and 1/(z+1) are analytic here.  Mirror of local_coeffs_at_m1
+    # under z -> -z (swap the roles of (z-1) and (z+1)).
+    P = term_pp[1] + x * (term_pp[0] / z + term_pp[2] / (z + 1))
+    Q = term_qq[2] * x + x**2 * (
+        term_qq[0] / z + term_qq[1] / (z**2) + term_qq[3] / (z + 1)
     )
-    A1 = term_a1[3] * x + x**2 * (
-        term_a1[0] / z + term_a1[1] / (z**2) + term_a1[2] / (z - 1)
+    A1 = term_a1[2] * x + x**2 * (
+        term_a1[0] / z + term_a1[1] / (z**2) + term_a1[3] / (z + 1)
     )
-    A2 = term_a2[3] * x + x**2 * (
-        term_a2[0] / z + term_a2[1] / (z**2) + term_a2[2] / (z - 1)
+    A2 = term_a2[2] * x + x**2 * (
+        term_a2[0] / z + term_a2[1] / (z**2) + term_a2[3] / (z + 1)
     )
 
     P  = trunc_series_from_expr(R, P)
@@ -124,12 +166,14 @@ def local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2):
     return coeffs(P, N), coeffs(Q, N), coeffs(A1, N), coeffs(A2, N)
 
 
-def local_coeffs_at_0m(ctx, term_pp, term_qq, term_a1, term_a2):
+def local_coeffs_at_0p(ctx, term_pp, term_qq, term_a1, term_a2):
     R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    z = -x    
-    
+    z = x
+
     # term_pp: [coeff_1/z, coeff_1/(z-1), coeff_1/(z+1)]
     # term_qq / term_a1 / term_a2: [coeff_1/z, coeff_1/z^2, coeff_1/(z-1), coeff_1/(z+1)]
+    # Expansion at z=0 toward z=+1: the local variable is z=+x (no reflection), so
+    # there is no d/dz=-d/dx sign flip downstream (cf. get_analytic_from_0p).
     P  = term_pp[0] + z * (
         term_pp[1] / (z - 1) + term_pp[2] / (z + 1)
     )
@@ -200,26 +244,47 @@ def hom_sol_fro_const(ctx, r, P, Q, sol_order=None):
     return series_from_coeffs(ctx, f)
 
 
-def singular_integral(ctx, f, alpha):
-    R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    return sum(f[kk] * x**(kk + 1) / (kk + 1 + alpha) for kk in range(N)) + O(x**(N + 1))
+def _contains_zero(ctx, val):
+    # True if val is zero (exact mode) or its ball encloses zero (route-A mode).
+    # Over balls val lives in K = RBF[eps]/(eps^2); contains_zero() is a RealBall
+    # method, so we extract the eps^0 coefficient first.
+    if ctx.get("ball"):
+        try:
+            return val.lift()[0].contains_zero()
+        except Exception:
+            try:
+                return val.contains_zero()
+            except Exception:
+                return val == ctx["K"](0)
+    return val == ctx["K"](0)
 
 
-def particular_sol_r1_is_0(ctx, psi1, psi2, aff, r):
-    K, R, x, N = ctx["K"], ctx["R"], ctx["x"], ctx["N"]
-    term   = psi1 * psi2.derivative() - psi2 * psi1.derivative()
-    psiW = r * psi1 * psi2 + x * term
-    aff_series  = series_from_coeffs(ctx, aff)
-    assert aff_series[0] == K(0), (
-        "right-hand side must vanish at x=0 for the Wronskian formula to produce a holomorphic result"
-    )
-    aff_shift   = aff_series / x
-    aff_inv_W   = aff_shift / psiW
-    inte1 = psi1 * aff_inv_W
-    inte2 = psi2 * aff_inv_W
-    integral1 = singular_integral(ctx, inte1, -r)
-    integral2 = integrate_regular(ctx, inte2)
-    return psi2 * integral1 - psi1 * integral2
+def particular_sol_recurrence(ctx, P, Q, G):
+    # Holomorphic particular solution  f = sum_{n>=0} c_n x^n  of the inhomogeneous
+    # Fuchsian normal form   x^2 f'' + x P(x) f' + Q(x) f = G(x),  built directly from
+    # the Frobenius recurrence (rec:aff) of Proposition prop:aff:rec:
+    #     I(n) c_n = g_n - sum_{j<n} (j p_{n-j} + q_{n-j}) c_j,   I(n) = n(n-1)+n p0+q0.
+    # Here I(n) != 0 for every n >= 1 (theta, lambda are non-integers).  The only
+    # resonant index is n=0 at z=+1, where q0 = I(0) = 0; there the normal-form forcing
+    # has g_0 = 0 (the structural (z-1) factor in A1, A2), so the n=0 equation reads
+    # 0 = 0 and we set c_0 := 0.  This reproduces, coefficient by coefficient, the
+    # variation-of-constants solution it replaces (which also satisfies f(z_0) = 0).
+    K, N = ctx["K"], ctx["N"]
+    p0, q0 = P[0], Q[0]
+    c = [K(0)] * (N + 1)
+    for ii in range(N + 1):
+        rhs = K(G[ii])
+        for jj in range(ii):
+            rhs -= (P[ii - jj] * jj + Q[ii - jj]) * c[jj]
+        if ii == 0 and _contains_zero(ctx, q0):
+            assert _contains_zero(ctx, rhs), (
+                "resonant index n=0 requires the normal-form forcing to vanish at the "
+                "base point (g_0 = 0)"
+            )
+            c[0] = K(0)
+        else:
+            c[ii] = rhs / (ii * (ii - 1) + p0 * ii + q0)
+    return series_from_coeffs(ctx, c)
 
 
 def construct_solutions_when_diff_is_integer_formal(ctx, r1, differ_of_r, P, Q, A1, A2,
@@ -288,26 +353,26 @@ def series_value_and_derivative(ctx, phi, x0):
     return vector(K, [phi_val, phi_der])
 
 
-def get_analytic_from_m1(ctx, th, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)/2):
+def get_analytic_from_p1(ctx, th, term_pp, term_qq, term_a1, term_a2, z0=QQ(1)/2):
     K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2)
+    P, Q, A1, A2 = local_coeffs_at_p1(ctx, term_pp, term_qq, term_a1, term_a2)
     r1  = K(0)
-    r2  = K(1) - P[0]
+    r2  = K(1) - P[0]                 # = 2 - lambda  (excluded singular exponent at z=+1)
     psi1 = hom_sol_fro_const(ctx, r1, P, Q)
     psi2 = hom_sol_fro_const(ctx, r2, P, Q)
-    fp1  = particular_sol_r1_is_0(ctx, psi1, psi2, A1, r2)
-    fp2  = particular_sol_r1_is_0(ctx, psi1, psi2, A2, r2)
-    xm1  = K(z0) + K(1)
-    Fh1  = series_value_and_derivative(ctx, psi1, xm1)
-    Ps2  = series_value_and_derivative(ctx, psi2, xm1)
-    Fp1  = analytic_value_and_derivative(ctx, fp1, xm1)
-    Fp2  = analytic_value_and_derivative(ctx, fp2, xm1)
+    fp1  = particular_sol_recurrence(ctx, P, Q, A1)
+    fp2  = particular_sol_recurrence(ctx, P, Q, A2)
+    xp1  = K(z0) - K(1)              # local var x = z - 1 (z = 1 + x); d/dz = d/dx
+    Fh1  = series_value_and_derivative(ctx, psi1, xp1)
+    Ps2  = series_value_and_derivative(ctx, psi2, xp1)
+    Fp1  = analytic_value_and_derivative(ctx, fp1, xp1)
+    Fp2  = analytic_value_and_derivative(ctx, fp2, xp1)
     return Fh1, Ps2, Fp1, Fp2
 
 
-def get_analytic_from_00(ctx, the, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)/2):
+def get_analytic_from_0p(ctx, the, term_pp, term_qq, term_a1, term_a2, z0=QQ(1)/2):
     K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_0m(
+    P, Q, A1, A2 = local_coeffs_at_0p(
         ctx, term_pp, term_qq, term_a1, term_a2
     )
     r_big        = K(1) - the
@@ -315,16 +380,11 @@ def get_analytic_from_00(ctx, the, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)
     phi1, phi2, fp1, fp2, C = construct_solutions_when_diff_is_integer_formal(
         ctx, r_big, differ_of_r, P, Q, A1, A2
     )
-    x00 = -K(z0)
+    x00 = K(z0)                      # x = z (z = +x), so no d/dz = -d/dx sign flip
     Ps1 = series_value_and_derivative(ctx, phi1, x00)
     Ps2 = series_value_and_derivative(ctx, phi2, x00)
     Fp1 = analytic_value_and_derivative(ctx, fp1, x00)
     Fp2 = analytic_value_and_derivative(ctx, fp2, x00)
-    # Sign correction: x = -z, so d/dz = -d/dx
-    Ps1 = vector(K, [Ps1[0], -Ps1[1]])
-    Ps2 = vector(K, [Ps2[0], -Ps2[1]])
-    Fp1 = vector(K, [Fp1[0], -Fp1[1]])
-    Fp2 = vector(K, [Fp2[0], -Fp2[1]])
     return Ps1, Ps2, Fp1, Fp2
 
 
@@ -332,40 +392,46 @@ def get_analytic_from_00(ctx, the, term_pp, term_qq, term_a1, term_a2, z0=QQ(-1)
 # Matrix constructor
 # -----------------------------------------------------------------------------
 
-def symbolic_matrix_A(N, z0=QQ(-1)/2, lam_value=None):
-    ctx = make_symbolic_context(N, lam_value=lam_value)
+def symbolic_matrix_A(N, z0=QQ(1)/2, lam_value=None, the_value=None, ball=None, bits=200):
+    ctx = make_symbolic_context(N, lam_value=lam_value, the_value=the_value,
+                                ball=ball, bits=bits)
     K   = ctx["K"]
     the = ctx["the"]
     lam = ctx["lam"]
     pp, qq, a1, a2 = default_parameter_matrices(ctx)
     eht = K(1) - the
+    # Matching at the two physical singular points z=0 and z=+1, with the operator
+    # of def:PQtl specialized directly at the physical +lambda.  At z=+1 the excluded
+    # (singular) branch has exponent 2-lambda and is annulled -- only the holomorphic
+    # branch and the particular solutions enter the matrix -- so the regularity is
+    # dictated by the binding exponent 2+lambda at z=-1.
     term_pp_the, term_qq_the, term_a1_the, term_a2_the = specialize_terms(pp, qq, a1, a2, the, lam)
     term_pp_eht, term_qq_eht, term_a1_eht, term_a2_eht = specialize_terms(pp, qq, a1, a2, eht, lam)
-    Fh1_m1_the, Fh2_m1_the, Fp1_m1_the, Fp2_m1_the = get_analytic_from_m1(
+    Fh1_p1_the, Fh2_p1_the, Fp1_p1_the, Fp2_p1_the = get_analytic_from_p1(
         ctx, the, term_pp_the, term_qq_the, term_a1_the, term_a2_the, z0=z0
     )
-    Fh1_m1_eht, Fh2_m1_eht, Fp1_m1_eht, Fp2_m1_eht = get_analytic_from_m1(
+    Fh1_p1_eht, Fh2_p1_eht, Fp1_p1_eht, Fp2_p1_eht = get_analytic_from_p1(
         ctx, eht, term_pp_eht, term_qq_eht, term_a1_eht, term_a2_eht, z0=z0
     )
-    Fh1_00_the, Fh2_00_the, Fp1_00_the, Fp2_00_the = get_analytic_from_00(
+    Fh1_0p_the, Fh2_0p_the, Fp1_0p_the, Fp2_0p_the = get_analytic_from_0p(
         ctx, the, term_pp_the, term_qq_the, term_a1_the, term_a2_the, z0=z0
     )
-    Fh1_00_eht, Fh2_00_eht, Fp1_00_eht, Fp2_00_eht = get_analytic_from_00(
+    Fh1_0p_eht, Fh2_0p_eht, Fp1_0p_eht, Fp2_0p_eht = get_analytic_from_0p(
         ctx, eht, term_pp_eht, term_qq_eht, term_a1_eht, term_a2_eht, z0=z0
     )
-    A_m1 = matrix(K, [
-        [Fh1_m1_the[0], 0,              Fp1_m1_the[0], Fp2_m1_the[0]],
-        [Fh1_m1_the[1], 0,              Fp1_m1_the[1], Fp2_m1_the[1]],
-        [0,              Fh1_m1_eht[0], Fp2_m1_eht[0], Fp1_m1_eht[0]],
-        [0,              Fh1_m1_eht[1], Fp2_m1_eht[1], Fp1_m1_eht[1]],
+    A_p1 = matrix(K, [
+        [Fh1_p1_the[0], 0,              Fp1_p1_the[0], Fp2_p1_the[0]],
+        [Fh1_p1_the[1], 0,              Fp1_p1_the[1], Fp2_p1_the[1]],
+        [0,              Fh1_p1_eht[0], Fp2_p1_eht[0], Fp1_p1_eht[0]],
+        [0,              Fh1_p1_eht[1], Fp2_p1_eht[1], Fp1_p1_eht[1]],
     ])
-    A_00 = matrix(K, [
-        [0, 0, Fp1_00_the[0], Fp2_00_the[0]],
-        [0, 0, Fp1_00_the[1], Fp2_00_the[1]],
-        [0, 0, Fp2_00_eht[0], Fp1_00_eht[0]],
-        [0, 0, Fp2_00_eht[1], Fp1_00_eht[1]],
+    A_0p = matrix(K, [
+        [0, 0, Fp1_0p_the[0], Fp2_0p_the[0]],
+        [0, 0, Fp1_0p_the[1], Fp2_0p_the[1]],
+        [0, 0, Fp2_0p_eht[0], Fp1_0p_eht[0]],
+        [0, 0, Fp2_0p_eht[1], Fp1_0p_eht[1]],
     ])
-    return A_m1 - A_00, ctx
+    return A_p1 - A_0p, ctx
 
 
 # =============================================================================

@@ -79,10 +79,10 @@ def L_bound(point, N0):
     """
     if point == "00":
         c1, c2 = QQ(4), QQ(8)       # valid for N0 >= 6
-    elif point == "m1":
-        c1, c2 = QQ(8), QQ(24)      # valid for N0 >= 11
+    elif point == "p1":
+        c1, c2 = QQ(8), QQ(16)      # valid for N0 >= 10 (z=+1; see lem:sup:-1)
     else:
-        raise ValueError("point must be '00' or 'm1'")
+        raise ValueError("point must be '00' or 'p1'")
     return c1 / N0 + c2 / (N0 * (N0 - 1))
 
 
@@ -90,13 +90,18 @@ def L_bound(point, N0):
 # Cauchy sup-bounds M_p(rho), M_q(rho)  (Lemmas lem:cau:Mbound:m1, lem:cau:Mbound:00)
 # -----------------------------------------------------------------------------
 
-def rational_M_m1(cp, cq, rho):
-    """M_p(rho), M_q(rho) at z=-1 from cp = (c^p_0, c^p_1, c^p_2), cq = (c^q_0..c^q_3)."""
-    Mp = abs(cp[2]) + rho * (abs(cp[0]) / (1 - rho) + abs(cp[1]) / (2 - rho))
-    Mq = (abs(cq[3]) * rho
+def rational_M_p1(cp, cq, rho):
+    """M_p(rho), M_q(rho) at z=+1 from cp = (c^p_0, c^p_1, c^p_2), cq = (c^q_0..c^q_3).
+
+    Mirror of rational_M_m1 under z -> -z: at z=+1 the leading (indicial) residue is
+    1/(z-1) -- index 1 in cp, index 2 in cq -- while the pole at distance 2 is now
+    1/(z+1) -- index 2 in cp, index 3 in cq.  The pole at distance 1 (1/z) is index 0.
+    """
+    Mp = abs(cp[1]) + rho * (abs(cp[0]) / (1 - rho) + abs(cp[2]) / (2 - rho))
+    Mq = (abs(cq[2]) * rho
           + rho**2 * (abs(cq[0]) / (1 - rho)
                       + abs(cq[1]) / (1 - rho)**2
-                      + abs(cq[2]) / (2 - rho)))
+                      + abs(cq[3]) / (2 - rho)))
     return Mp, Mq
 
 

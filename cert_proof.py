@@ -58,10 +58,10 @@ def verify_det_sign(sign, lam_value, all_res, Asym, order, N0, Nres, bits,
     """
     # Contraction is theta-independent, so check it once: bisecting theta could
     # never repair a too-small N0, it would just refine down to min_width.
-    for point in ["m1", "00"]:
+    for point in ["p1", "00"]:
         if not (L_bound(point, N0) < 1):
             raise ValueError("contraction not certified at %s for N0=%d "
-                             "(need N0 >= 6 at z=0, N0 >= 11 at z=-1)" % (point, N0))
+                             "(need N0 >= 6 at z=0, N0 >= 11 at z=+1)" % (point, N0))
 
     # Pre-flight: probe det at a few point thetas (thin balls).  At a point theta
     # the only error left is delta*, so if det cannot be signed there, refining

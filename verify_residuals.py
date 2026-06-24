@@ -9,14 +9,14 @@ from sage.all import *
 
 from cert_residuals import all_res_sym
 
-MATRIX_FUNCS = {"m1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
+MATRIX_FUNCS = {"p1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
 
 
 def check_term_counts(all_res):
     """We compute exactly N0 terms of each f^ap, and the full N0..Nres band of xi."""
     N0, Nres = all_res["_N0"], all_res["_Nres"]
 
-    for point in ["m1", "00"]:
+    for point in ["p1", "00"]:
         for branch in ["the", "eht"]:
             blk = all_res[point][branch]
             for fn in MATRIX_FUNCS[point]:
@@ -43,7 +43,7 @@ def check_residual_support(all_res):
     """xi vanishes exactly (over the field) for k < N0; this fixes the matching order."""
     N0 = all_res["_N0"]
 
-    for point in ["m1", "00"]:
+    for point in ["p1", "00"]:
         for branch in ["the", "eht"]:
             blk = all_res[point][branch]
             for fn in MATRIX_FUNCS[point]:
@@ -69,7 +69,7 @@ def check_truncation_stable(N0, Nres_low, Nres_high, lam_value=None):
 
     a = all_res_sym(Nres_low,  N0, lam_value=lam_value)
     b = all_res_sym(Nres_high, N0, lam_value=lam_value)
-    for point in ["m1", "00"]:
+    for point in ["p1", "00"]:
         for branch in ["the", "eht"]:
             for fn in MATRIX_FUNCS[point]:
                 xa, xb = a[point][branch][fn], b[point][branch][fn]

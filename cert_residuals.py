@@ -19,10 +19,10 @@ from local_fuchs import (
     make_symbolic_context,
     default_parameter_matrices,
     specialize_terms,
-    local_coeffs_at_m1,
-    local_coeffs_at_0m,
+    local_coeffs_at_p1,
+    local_coeffs_at_0p,
     hom_sol_fro_const,
-    particular_sol_r1_is_0,
+    particular_sol_recurrence,
     construct_solutions_when_diff_is_integer_formal,
     _apply_operator_r,
 )
@@ -47,29 +47,42 @@ def _residual_of(ctx, f_full, N0, P, Q, G_list=None):
     K, N = ctx["K"], ctx["N"]
     f_approx = _truncate(ctx, f_full, N0)
     D = _apply_operator_r(ctx, f_approx, K(0), P, Q, G_list=G_list)
-    assert D[0] == K(0) and D[1] == K(0), (
-        "residual defect does not vanish at orders 0 and 1 -- matching condition violated"
-    )
+    if ctx.get("ball"):
+        # over balls the structural zeros become small balls; check containment
+        def _rb_contains_zero(elem):
+            try:
+                return elem.lift()[0].contains_zero()
+            except Exception:
+                try:
+                    return elem.contains_zero()
+                except Exception:
+                    return False
+        assert _rb_contains_zero(D[0]) and _rb_contains_zero(D[1]), (
+            "residual defect does not vanish at orders 0 and 1 -- matching condition violated"
+        )
+    else:
+        assert D[0] == K(0) and D[1] == K(0), (
+            "residual defect does not vanish at orders 0 and 1 -- matching condition violated"
+        )
     xi = [K(0)] * (N + 1)
     for k in range(2, N + 1):
         xi[k] = D[k] / (K(k) * K(k - 1))
     return xi
 
 
-def residuals_at_m1(ctx, term_pp, term_qq, term_a1, term_a2, N0, sol_order=None):
+def residuals_at_p1(ctx, term_pp, term_qq, term_a1, term_a2, N0, sol_order=None):
     """
-    Functions at z=-1 entering Mcrit: the holomorphic Frobenius solution phi1
+    Functions at z=+1 entering Mcrit: the holomorphic Frobenius solution phi1
     (root r=0) and the two particular solutions fp1, fp2.  All are holomorphic,
-    so the residual operator uses r=0.
+    so the residual operator uses r=0.  (The singular branch, exponent 2-lambda,
+    is the excluded one.)
     """
     K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_m1(ctx, term_pp, term_qq, term_a1, term_a2)
+    P, Q, A1, A2 = local_coeffs_at_p1(ctx, term_pp, term_qq, term_a1, term_a2)
     r1 = K(0)
-    r2 = K(1) - P[0]
     phi1 = hom_sol_fro_const(ctx, r1, P, Q, sol_order=sol_order)
-    phi2 = hom_sol_fro_const(ctx, r2, P, Q, sol_order=sol_order)   # only to build fp1, fp2
-    fp1 = particular_sol_r1_is_0(ctx, phi1, phi2, A1, r2)
-    fp2 = particular_sol_r1_is_0(ctx, phi1, phi2, A2, r2)
+    fp1 = particular_sol_recurrence(ctx, P, Q, A1)
+    fp2 = particular_sol_recurrence(ctx, P, Q, A2)
     return {
         "phi1": _residual_of(ctx, phi1, N0, P, Q, G_list=None),
         "fp1":  _residual_of(ctx, fp1,  N0, P, Q, G_list=A1),
@@ -90,10 +103,10 @@ def residuals_at_00(ctx, term_pp, term_qq, term_a1, term_a2, N0, th, sol_order=N
     """
     Functions at z=0 entering Mcrit: fp1, fp2 (both holomorphic).  The dominant
     Frobenius solution phi1 ~ x^{1-theta} does not appear in the matrix, so only
-    the particular solutions are needed.
+    the particular solutions are needed.  Expansion toward z=+1 (z=+x, no flip).
     """
     K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_0m(
+    P, Q, A1, A2 = local_coeffs_at_0p(
         ctx, term_pp, term_qq, term_a1, term_a2
     )
     r1 = K(1) - th
@@ -115,39 +128,48 @@ def residuals_at_00(ctx, term_pp, term_qq, term_a1, term_a2, N0, th, sol_order=N
 
 
 # Functions whose residual enters each singular point, in matrix order.
-MATRIX_FUNCS = {"m1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
+MATRIX_FUNCS = {"p1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
 
 
-def all_res_sym(Nres, N0, lam_value=None):
+def all_res_sym(Nres, N0, lam_value=None, the_value=None, ball=None, bits=200):
     """
     Every matrix-relevant residual series, exact in (theta, lambda).
 
     lam_value : fix lambda to this rational (univariate, faster), or None to keep
                 it symbolic.
+    the_value : fix theta to this rational and keep lambda symbolic (univariate in
+                lambda) -- the cheap pass for the simplicity gap, no bivariate OOM.
+    ball      : (theta_ball, lam_ball) -> route-A dual-number-over-balls context
+                (lambda = lam_ball + eps, eps^2=0); residual coefficients come out as
+                duals whose eps^0 part is the value and eps^1 part the d/dlambda, both
+                enclosed over the (theta,lambda) box.
 
     The Frobenius recursion is stopped at order N0 (sol_order=N0): the residual
     only reads f^ap up to N0-1, so this is exact and drops the costly high-order
     Frobenius coefficients.
 
-    Returns {"m1": {"the": blk, "eht": blk}, "00": {...}, plus metadata}, where
+    Returns {"p1": {"the": blk, "eht": blk}, "00": {...}, plus metadata}, where
     each blk maps a function name to its xi list and carries "fapprox", "term_pp",
     "term_qq", "_P", "_Q".
     """
     if not (Nres > N0):
         raise ValueError("Nres must be strictly greater than N0")
-    ctx = make_symbolic_context(Nres, lam_value=lam_value)
+    ctx = make_symbolic_context(Nres, lam_value=lam_value, the_value=the_value,
+                                ball=ball, bits=bits)
     K = ctx["K"]
     the, lam = ctx["the"], ctx["lam"]
+    # Base matrices encode the operator of def:PQtl directly in +lambda (consistent
+    # with local_fuchs.symbolic_matrix_A); specialize at the physical lambda.
     pp, qq, a1, a2 = default_parameter_matrices(ctx)
     sol_order = N0
 
     out = {
-        "m1": {}, "00": {},
+        "p1": {}, "00": {},
         "_ctx": ctx, "_N0": N0, "_Nres": Nres,
         "_lam_value": lam_value,
     }
     for branch, th in [("the", the), ("eht", K(1) - the)]:
         t_pp, t_qq, t_a1, t_a2 = specialize_terms(pp, qq, a1, a2, th, lam)
-        out["m1"][branch] = residuals_at_m1(ctx, t_pp, t_qq, t_a1, t_a2, N0, sol_order=sol_order)
+        out["p1"][branch] = residuals_at_p1(ctx, t_pp, t_qq, t_a1, t_a2, N0, sol_order=sol_order)
         out["00"][branch] = residuals_at_00(ctx, t_pp, t_qq, t_a1, t_a2, N0, th, sol_order=sol_order)
     return out

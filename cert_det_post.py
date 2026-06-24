@@ -27,7 +27,7 @@ from sage.all import *
 # no f_theta tail, is used.
 
 from local_fuchs import symbolic_matrix_A
-from cert_eval import rational_M_m1, rational_M_00, delta_block
+from cert_eval import rational_M_p1, rational_M_00, delta_block
 
 
 # -----------------------------------------------------------------------------
@@ -160,8 +160,8 @@ def _entry_tm(entry, c, lam_value, RB, r, r_rat, order, Pt):
 # Truncation perturbation (per-function residual bounds, per-entry radii)
 # -----------------------------------------------------------------------------
 
-_RATIONAL_M = {"m1": rational_M_m1, "00": rational_M_00}
-_FN_KEYS = {"m1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
+_RATIONAL_M = {"p1": rational_M_p1, "00": rational_M_00}
+_FN_KEYS = {"p1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
 
 
 def _abs_over_ball(elem, c, lam_value, r_rat, Pt):
@@ -219,7 +219,7 @@ def delta_per_function(all_res, bits, theta_mid, theta_rad, lam_value, lam_rad=0
     rho = RB(QQ(rho))
     N0, Nres = all_res["_N0"], all_res["_Nres"]
     out = {}
-    for point in ["m1", "00"]:
+    for point in ["p1", "00"]:
         for branch in ["the", "eht"]:
             blk = all_res[point][branch]
             cp = eval_series_tight(blk["term_pp"], c, lam_value, r_rat, RB, Pt)
@@ -234,23 +234,23 @@ def delta_per_function(all_res, bits, theta_mid, theta_rad, lam_value, lam_rad=0
 
 
 def _radius_matrix(dpf, RB):
-    """Per-entry radii r_ij, following symbolic_matrix_A's layout A = A_m1 - A_00."""
+    """Per-entry radii r_ij, following symbolic_matrix_A's layout A = A_p1 - A_0p."""
     v = lambda p, b, f: RB(dpf[(p, b, f)][0].upper())
     d = lambda p, b, f: RB(dpf[(p, b, f)][1].upper())
     Z = RB(0)
     return [
-        [v("m1", "the", "phi1"), Z,
-         v("m1", "the", "fp1") + v("00", "the", "fp1"),
-         v("m1", "the", "fp2") + v("00", "the", "fp2")],
-        [d("m1", "the", "phi1"), Z,
-         d("m1", "the", "fp1") + d("00", "the", "fp1"),
-         d("m1", "the", "fp2") + d("00", "the", "fp2")],
-        [Z, v("m1", "eht", "phi1"),
-         v("m1", "eht", "fp2") + v("00", "eht", "fp2"),
-         v("m1", "eht", "fp1") + v("00", "eht", "fp1")],
-        [Z, d("m1", "eht", "phi1"),
-         d("m1", "eht", "fp2") + d("00", "eht", "fp2"),
-         d("m1", "eht", "fp1") + d("00", "eht", "fp1")],
+        [v("p1", "the", "phi1"), Z,
+         v("p1", "the", "fp1") + v("00", "the", "fp1"),
+         v("p1", "the", "fp2") + v("00", "the", "fp2")],
+        [d("p1", "the", "phi1"), Z,
+         d("p1", "the", "fp1") + d("00", "the", "fp1"),
+         d("p1", "the", "fp2") + d("00", "the", "fp2")],
+        [Z, v("p1", "eht", "phi1"),
+         v("p1", "eht", "fp2") + v("00", "eht", "fp2"),
+         v("p1", "eht", "fp1") + v("00", "eht", "fp1")],
+        [Z, d("p1", "eht", "phi1"),
+         d("p1", "eht", "fp2") + d("00", "eht", "fp2"),
+         d("p1", "eht", "fp1") + d("00", "eht", "fp1")],
     ]
 
 
