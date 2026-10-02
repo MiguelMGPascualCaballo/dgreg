@@ -19,7 +19,7 @@ from verify_residuals import run as run_sanity
 
 
 if __name__ == "__main__":
-    N = 900          # prime threshold; p* = next_prime(N-1) = 907
+    N = 300          # prime threshold
     N0 = DEFAULT_N0
     Nres = default_nres(N0)
     run_sanity(N0=N0, Nres=Nres, lam_value=DEFAULT_LAM_LOW)

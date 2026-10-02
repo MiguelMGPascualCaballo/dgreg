@@ -80,7 +80,6 @@ def make_symbolic_context(N, lam_value=None, the_value=None, ball=None, bits=200
     }
 
 
-
 # -----------------------------------------------------------------------------
 # Parameter matrices in the global coordinate z
 # -----------------------------------------------------------------------------
@@ -164,8 +163,7 @@ def local_coeffs_at_0(ctx, term_pp, term_qq, term_a1, term_a2):
 
     # term_pp: [coeff_1/z, coeff_1/(z-1), coeff_1/(z+1)]
     # term_qq / term_a1 / term_a2: [coeff_1/z, coeff_1/z^2, coeff_1/(z-1), coeff_1/(z+1)]
-    # Expansion at z=0 in the local variable x = z, so there is no d/dz = -d/dx
-    # sign flip downstream (cf. get_analytic_from_00).
+    # Expansion at z=0 in the local variable x = z: no d/dz = -d/dx sign flip.
     P  = term_pp[0] + z * (
         term_pp[1] / (z - 1) + term_pp[2] / (z + 1)
     )
@@ -194,16 +192,6 @@ def series_from_coeffs(ctx, a):
     R, x = ctx["R"], ctx["x"]
     n = min(len(a), ctx["N"] + 1)
     return sum(R.base_ring()(a[kk]) * x**kk for kk in range(n)) + O(x**n)
-
-
-def integrate_regular(ctx, f):
-    R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    return sum(f[kk] * x**(kk + 1) / (kk + 1) for kk in range(N)) + O(x**(N + 1))
-
-
-def integ_factor_not_int(ctx, f, alpha):
-    R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    return sum(f[kk] * x**kk / (kk - alpha) for kk in range(N + 1)) + O(x**(N + 1))
 
 
 # -----------------------------------------------------------------------------
@@ -282,95 +270,6 @@ def particular_sol_r1_is_0_direct(ctx, aff, P, Q, N0):
     return series_from_coeffs(ctx, c)
 
 
-def _contains_zero(ctx, val):
-    # True if val is zero (exact mode) or its ball encloses zero (ball mode).
-    if ctx.get("ball"):
-        try:
-            return val.lift()[0].contains_zero()
-        except Exception:
-            try:
-                return val.contains_zero()
-            except Exception:
-                return val == ctx["K"](0)
-    return val == ctx["K"](0)
-
-
-def particular_sol_recurrence(ctx, P, Q, G):
-    # Previous form of the two direct recurrences above, kept for comparison:
-    # sets c_0 = 0 when q0 = 0 (z=1) and otherwise solves from n=0 (z=0).
-    # Not used by the proof.
-    K, N = ctx["K"], ctx["N"]
-    p0, q0 = P[0], Q[0]
-    c = [K(0)] * (N + 1)
-    for ii in range(N + 1):
-        rhs = K(G[ii])
-        for jj in range(ii):
-            rhs -= (P[ii - jj] * jj + Q[ii - jj]) * c[jj]
-        if ii == 0 and _contains_zero(ctx, q0):
-            assert _contains_zero(ctx, rhs), (
-                "resonant index n=0 requires the normal-form forcing to vanish at the "
-                "base point (g_0 = 0)"
-            )
-            c[0] = K(0)
-        else:
-            c[ii] = rhs / (ii * (ii - 1) + p0 * ii + q0)
-    return series_from_coeffs(ctx, c)
-
-
-def homogeneous_resonant_factors(ctx, r1, differ_of_r, P, Q, sol_order=None):
-    # Homogeneous factors at z=0 (root difference 2): phi1 by Frobenius and phi2
-    # by reduction of order.  No particular solution is built here.
-    R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    d  = differ_of_r
-    phi1 = hom_sol_fro_const(ctx, r1, P, Q, sol_order=sol_order)
-    P_series = series_from_coeffs(ctx, P)
-    wi_P = (P_series - P[0]) / x
-    analytic_term1 = -integrate_regular(ctx, wi_P)
-    expo_analytic_term1 = analytic_term1.exp()
-    psi  = expo_analytic_term1 / (phi1**2)
-    primi = sum(
-        (psi[kk] / (kk - d)) * x**kk
-        for kk in range(N + 1)
-        if kk != d
-    ) + O(x**(N + 1))
-    C    = psi[d]
-    phi2 = primi * phi1
-    return phi1, phi2, C
-
-
-def construct_solutions_when_diff_is_integer_formal(ctx, r1, differ_of_r, P, Q, A1, A2,
-                                                    sol_order=None):
-    # Variation-of-constants construction at z=0, kept for comparison.  The
-    # proof uses particular_sol_ordinary_direct.
-    R, x, N = ctx["R"], ctx["x"], ctx["N"]
-    r2 = r1 - differ_of_r
-    d = differ_of_r
-    phi1, phi2, C = homogeneous_resonant_factors(
-        ctx, r1, differ_of_r, P, Q, sol_order=sol_order
-    )
-    phi1_phi1 = phi1 * phi1
-    phi1_phi2 = phi1 * phi2
-    corch = phi1 * phi2.derivative() - phi2 * phi1.derivative()
-    psiW  = C * x**d * phi1_phi1 - d * phi1_phi2 + x * corch
-    inv_psiW  = 1 / psiW
-    A1_series = series_from_coeffs(ctx, A1)
-    A2_series = series_from_coeffs(ctx, A2)
-    def build_fp(A_series):
-        aux_integrand = A_series * inv_psiW
-        psi1_j  = aux_integrand * phi1
-        psi2_j  = aux_integrand * phi2
-        beta1   = integ_factor_not_int(ctx, psi1_j, r2)
-        beta2   = integ_factor_not_int(ctx, psi2_j, r1)
-        J       = integ_factor_not_int(ctx, beta1, r2)
-        first   = C * x**d * phi1 * J
-        second  = phi2 * beta1
-        third   = phi1 * beta2
-        return first + second - third
-    fp1 = build_fp(A1_series)
-    fp2 = build_fp(A2_series)
-    return phi1, phi2, fp1, fp2, C
-
-
 # -----------------------------------------------------------------------------
 # Values and matrix construction
 # -----------------------------------------------------------------------------
@@ -421,32 +320,6 @@ def get_particular_from_00(ctx, term_pp, term_qq, term_a1, term_a2, z0=QQ(1)/2):
     fp2 = particular_sol_ordinary_direct(ctx, A2, P, Q, ctx["N"])
     return (analytic_value_and_derivative(ctx, fp1, z0),
             analytic_value_and_derivative(ctx, fp2, z0))
-
-
-def get_analytic_from_00(ctx, the, term_pp, term_qq, term_a1, term_a2, z0=QQ(1)/2):
-    # As get_particular_from_00, plus the homogeneous factors phi1, phi2 at z=0
-    # (zero placeholders in ball mode).  Not used by symbolic_matrix_A.
-    K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_0(
-        ctx, term_pp, term_qq, term_a1, term_a2
-    )
-    r_big        = K(1) - the
-    differ_of_r  = ZZ(2)
-    x00 = K(z0)                      # x = z, so no d/dz = -d/dx sign flip
-    fp1 = particular_sol_ordinary_direct(ctx, A1, P, Q, ctx["N"])
-    fp2 = particular_sol_ordinary_direct(ctx, A2, P, Q, ctx["N"])
-    if ctx.get("ball"):
-        Ps1 = vector(K, [K(0), K(0)])
-        Ps2 = vector(K, [K(0), K(0)])
-    else:
-        phi1, phi2, C = homogeneous_resonant_factors(
-            ctx, r_big, differ_of_r, P, Q
-        )
-        Ps1 = series_value_and_derivative(ctx, phi1, x00)
-        Ps2 = series_value_and_derivative(ctx, phi2, x00)
-    Fp1 = analytic_value_and_derivative(ctx, fp1, x00)
-    Fp2 = analytic_value_and_derivative(ctx, fp2, x00)
-    return Ps1, Ps2, Fp1, Fp2
 
 
 # -----------------------------------------------------------------------------

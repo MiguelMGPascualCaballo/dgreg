@@ -8,9 +8,8 @@ from time import perf_counter
 #
 #     det(Mcrit) < 0  at lambda = 56/100   and   det(Mcrit) > 0  at lambda = 60/100,
 #
-# at theta_p = h_p/p for every prime p < N, with h_p/p nearest `center` in
-# [1/3, 1/2], and uniformly on J = [center - 1/(2p*), center + 1/(2p*)],
-# p* = next_prime(N-1), for the primes p >= N (Lemma lem:cover).  The exact
+# at theta_p = floor(p/2)/p for every prime p < N and on the interval
+# J = [1/2 - 1/(2N), 1/2] for the primes p >= N (Lemma lem:cover).  The exact
 # symbolic residuals and matrix are built once per lambda; balls enter only when
 # they are evaluated over a theta-ball (eval_series_tight and the Taylor models
 # of cert_det_post).  J is certified by adaptive bisection.
@@ -21,7 +20,8 @@ from cert_det_post import build_post, delta_per_function, certified_det_post
 
 DEFAULT_N0 = 31
 DEFAULT_BITS = 200
-DEFAULT_CENTER = QQ(5) / 12
+# center = 1/2: theta_p = floor(p/2)/p.
+DEFAULT_CENTER = QQ(1) / 2
 DEFAULT_LAM_LOW = QQ(56) / 100
 DEFAULT_LAM_UPP = QQ(60) / 100
 DEFAULT_RHO = QQ(3) / 4
@@ -153,10 +153,10 @@ def prove(N, N0=DEFAULT_N0, Nres=None, bits=DEFAULT_BITS, center=DEFAULT_CENTER,
       * primes p < N (= prime_range(N)) are checked at a single point theta_p = h_p/p,
         with h_p the integer nearest p*center, clipped to [ceil(p/3), floor(p/2)];
       * all primes p >= N are covered at once by certifying the sign of det on the
-        interval J = [center - 1/(2q), center + 1/(2q)] of length 1/q, where q is the
-        smallest prime >= N.  A fraction h/p lies in J iff h lies in p*J, an interval
-        of length p/q >= 1 (every prime p >= N satisfies p >= q), so p*J contains an
-        integer h.  Since J is contained in [1/3, 1/2], h/p lies in [1/3, 1/2].
+        interval J = [center - 1/(2N), center].
+
+    At center = 1/2 (the default), theta_p = floor(p/2)/p.  For odd p >= N this is
+    theta_p = 1/2 - 1/(2p), which lies in J, so every prime p >= N has theta_p in J.
 
     Returns True; raises on the first failure, including a wrong sign or an
     undecided sign with the chosen truncation order N0 and precision bits.
@@ -165,9 +165,7 @@ def prove(N, N0=DEFAULT_N0, Nres=None, bits=DEFAULT_BITS, center=DEFAULT_CENTER,
         Nres = default_nres(N0)
     order = 1                                     # det enclosure order (fixed; see cert_det_post)
     primes = list(prime_range(N))                 # primes p < N, handled as points
-    q = next_prime(N - 1)                         # smallest prime >= N, the first one J must cover
-    half = QQ(1) / (2 * q)
-    a, b = center - half, center + half           # J, of length 1/q
+    a, b = center - QQ(1) / (2 * N), center       # J, of length 1/(2N), anchored at the center
     if a < QQ(1) / 3 or b > QQ(1) / 2:
         raise ValueError("J = [%s, %s] leaves [1/3, 1/2]; raise N or move center" % (a, b))
 
@@ -207,7 +205,7 @@ def prove(N, N0=DEFAULT_N0, Nres=None, bits=DEFAULT_BITS, center=DEFAULT_CENTER,
 
         # (2) all primes p >= N at once, on the interval J
         t = perf_counter()
-        print("  covering primes >= %d on J = [%s, %s] (length 1/%d) ..." % (N, a, b, q))
+        print("  covering primes >= %d on J = [%s, %s] (length 1/%d) ..." % (N, a, b, 2 * N))
         verify_det_sign(sign, lam, all_res, Asym, order, N0, Nres, bits,
                         theta_lo=a, theta_hi=b, rho=rho, b0=b0, verbose=verbose)
         print("  J certified in %.1fs" % (perf_counter() - t))
