@@ -1,64 +1,66 @@
-# Supplementary code - *On the linear instability of De Gregorio steady states*
+# Supplementary code - linear instability of the De Gregorio steady states
 
 Computer-assisted verification of Lemma `lem:negposjump`: the determinant of the
-matching matrix $M_{\lambda,\theta}$ (Definition `def:Mat`) is
+matching matrix $M_{\lambda,\theta}$ (Definition `def:Mat`) satisfies
 
 $$\det M_{\lambda,\theta} < 0 \quad\text{at } \lambda=\tfrac{56}{100},
 \qquad
 \det M_{\lambda,\theta} > 0 \quad\text{at } \lambda=\tfrac{60}{100},$$
 
-uniformly for $\theta\in\big[\tfrac13,\tfrac12\big]$. The sign change yields, by the
+at the point $\theta_p=h_p/p$ for every prime $p<N=900$, and uniformly on
+
+$$J=\Big[\tfrac5{12}-\tfrac1{2p^\ast},\ \tfrac5{12}+\tfrac1{2p^\ast}\Big],
+\qquad p^\ast=\texttt{next\_prime}(N-1)=907,$$
+
+for the primes $p\ge N$ (Lemma `lem:cover`). The sign change yields, by the
 intermediate value theorem, an eigenvalue $\lambda_\theta\in(0.56,0.60)$ of
-$L_\theta$ (Corollary `cor:detzero`), and hence the linear instability of every
+$L_\theta$ (Corollary `cor:detzero` and Proposition `prop:eigte`), and hence the linear instability of every
 excited state $-\sin(nx)$, $n\ge 2$ (Theorem `thm:eig`).
 
 ## Requirements
 
 [SageMath](https://www.sagemath.org/). The certified bounds use Sage's
 `RealBallField` (Arb interval arithmetic); the exact layer uses
-`Frac(QQ[the, lam])`. No other dependencies.
+`Frac(QQ[the])` at each fixed $\lambda$. No other dependencies.
 
-Run inside a Sage session, or with `sage -python`:
+Run with the Python interpreter of the Sage installation (inside the Sage
+environment, `python run_proof.py`; with the classic Sage launcher,
+`sage -python run_proof.py`):
 
 ```sh
-sage -python run_proof.py            # run sanity checks, then certify the theorem
+python run_proof.py                  # sanity checks, then the certificate
 ```
 ```python
 # or, interactively in `sage`:
 from cert_proof import DEFAULT_LAM_LOW, DEFAULT_N0, default_nres, prove
 from verify_residuals import run as run_sanity
 run_sanity(N0=DEFAULT_N0, Nres=default_nres(DEFAULT_N0), lam_value=DEFAULT_LAM_LOW)
-prove(50, N0=DEFAULT_N0)             # full theorem: all primes via points + interval J
+prove(900, N0=DEFAULT_N0)            # primes p < 900 at points, p >= 900 on J
 ```
 
 ## How the verification is organized
 
-The proof separates the **exact symbolic** computation from the single step
-where **interval arithmetic** enters.
-
-Internally, the labels `p1` and `00` refer to the singular points `z=+1` and
-`z=0`, while the branches `the` and `eht` correspond to `theta` and `1-theta`.
+The labels `p1` and `00` refer to the singular points `z=1` and `z=0`, with
+local coordinates `x=1-z` and `x=z`; the branches `the` and `eht` correspond to
+`theta` and `1-theta`. Matching takes place at `z=1/2`, hence `x=1/2` in both
+charts. The derivative conversion is `d/dz=-d/dx` at `p1` and `d/dz=d/dx` at
+`00`.
 
 1. **Exact symbolic layer** (`local_fuchs.py`, `cert_residuals.py`) - builds the
-   matrix entries and the residual series of the truncated Frobenius solutions
-   over $K=\mathrm{Frac}(\mathbb{Q}[\theta,\lambda])$ (or
-   $\mathrm{Frac}(\mathbb{Q}[\theta])$ with $\lambda$ fixed). No intervals.
-2. **Certified numeric layer** (`cert_eval.py`, `cert_det_post.py`) - substitutes
-   $(\theta,\lambda)$ as balls and assembles the certified enclosure of
-   $\det M_{\lambda,\theta}$.
-3. **Drivers** (`cert_proof.py`) - first run the prime-by-prime reduction, then
-   certify the remaining interval by adaptive bisection.
+   truncated matrix entries and the residual coefficients
+   $\xi_0,\dots,\xi_{N_{\rm res}}$ over $K=\mathrm{Frac}(\mathbb{Q}[\theta])$
+   ($\lambda$ fixed). No intervals.
+2. **Certified layer** (`cert_det_post.py`, `cert_eval.py`) - encloses the
+   exact data over a $\theta$-ball: residual and approximation coefficients by
+   `eval_series_tight`, matrix entries and determinant by Taylor models. The
+   bounds of Appendix `sec:appendix:errors` are assembled in `cert_eval.py`.
+3. **Driver** (`cert_proof.py`) - point checks for the primes $p<N$, then
+   adaptive bisection on $J$.
 
-Two parameter conventions used throughout the certified layer:
-
-* $\lambda$ is enclosed as a **thin** ball at each of the two endpoints
-  $\tfrac{56}{100}, \tfrac{60}{100}$, never as an interval.
-* $\theta$ is treated in two stages. First, for each prime $p<N$, the proof is
-  checked at the single point $\theta_p=\tfrac{h_p}p$. Then the remaining primes are
-  covered at once by the interval $J=\big[c\pm\tfrac1{2q}\big]$, where $q$ is the
-  smallest prime $\ge N$. Only this interval step is **subdivided** by
-  bisection, when a ball makes some coefficient denominator straddle a pole or
-  leaves the sign undecided.
+$\lambda$ is never an interval: the two values $\tfrac{56}{100}$ and
+$\tfrac{60}{100}$ are fixed rationals. Only $J$ is subdivided, when the sign is
+undecided or an enclosure fails (a denominator lower bound that is not positive
+on the ball).
 
 ### Dependency graph
 
@@ -88,108 +90,126 @@ cert_residuals.py   cert_det_post.py
 
 **`local_fuchs.py`** - exact symbolic engine.
 - `make_symbolic_context` - the field $K$ and ring $K[[x]]$.
-- `default_parameter_matrices`, `specialize_terms` - the specialized coefficient
-  vectors `term_pp` $=(c^p_i)$, `term_qq` $=(c^q_j)$.
-- `local_coeffs_at_m1`, `local_coeffs_at_0m` - the Fuchsian normal-form
-  coefficients $p,q$ and affine forcings $A_1,A_2$ of $z=x-1$ and $z=-x$ at $x=0$
-  (`eq:op-m1`, `eq:op-00`).
+- `default_parameter_matrices`, `specialize_terms` - the partial fraction
+  coefficients `term_pp` $=(c^p_i)$, `term_qq` $=(c^q_j)$ and the affine terms
+  (`PQfracform`).
+- `local_coeffs_at_p1`, `local_coeffs_at_0` - the normalized local coefficients
+  $p,q$ and forcings $g$ at $x=0$ in the charts $x=1-z$ (`eq:op-m1`) and $x=z$.
 - `hom_sol_fro_const` - Frobenius series, recurrences `rec:0`/`rec:1`. The
-  argument `sol_order=N0` stops the recursion at the truncation order (exact for
-  the residual, which never reads past $N_0-1$).
-- `particular_sol_r1_is_0` - particular solution at $z=-1$ by the Wronskian
-  (Lemma `lem:loc:aff-1`, `def:Fphol-1`).
-- `construct_solutions_when_diff_is_integer_formal` - the resonant case at $z=0$
-  (root difference $2$): $\phi_1$, $\phi_2$ (reduction of order, log term), and
-  the two particular solutions (Lemmas `lem:loc:0`, `lem:loc:aff0`,
-  `def:Fphol0`).
-- `symbolic_matrix_A` - assembles $M_{\lambda,\theta}=A_{-1}-A_{0}$ (Definition
+  argument `sol_order=N0` stops the recursion at degree $N_0-1$.
+- `particular_sol_r1_is_0_direct` - particular solution at $z=1$ from the
+  recurrence `rec:aff`, with $f_0=0$ (Lemma `lem:loc:aff1`).
+- `particular_sol_ordinary_direct` - particular solution at $z=0$ from
+  `rec:aff`, starting at $k=0$; all coefficients are determined since the
+  indicial roots $1-\theta$, $-1-\theta$ are not nonnegative integers
+  (Lemma `lem:loc:aff0`).
+- `get_analytic_from_p1`, `get_particular_from_00` - values and derivatives at
+  the matching point.
+- `symbolic_matrix_A` - assembles $M_{\lambda,\theta}=A_{1}-A_{0}$ (Definition
   `def:Mat`).
-- `_apply_operator_r` - the defect $D=G-\mathcal L_r[f^{\rm ap}]$ behind the
+- `_apply_operator_r` - the defect $g-\mathcal L[f^{\rm ap}]$ behind the
   residual (`def:appB:R`).
+- Kept for comparison, not used by the proof: `particular_sol_recurrence`,
+  `homogeneous_resonant_factors`,
+  `construct_solutions_when_diff_is_integer_formal` (variation of constants
+  at $z=0$), `get_analytic_from_00`.
 
-**`cert_residuals.py`** - exact residual series.
-- `all_res_sym(Nres, N0, lam_value=None)` - for both singular points
-  and both branches $\theta^\pm$, the residual coefficients $\xi_k$
-  (`def:appB:R`) of each matrix function, exact in $(\theta,\lambda)$. Because
-  $f^{\rm}$ matches the solution to order $N_0$, $\xi_k=0$ for $k<N_0$ and is
-  supported on $N_0\le k\le N_{\mathrm{res}}$. Also stores `f_approx` (the
-  $f^{\rm ap}_m$), `term_pp`, `term_qq`.
+**`cert_residuals.py`** - exact residual data.
+- `all_res_sym(Nres, N0, lam_value)` - for both singular points and both
+  branches, the residual coefficients $\xi_0,\dots,\xi_{N_{\rm res}}$
+  (`def:appB:R`) of each matrix function, $N_{\rm res}\ge N_0$. Since $f^{\rm ap}$
+  matches the solution to order $N_0$, $\xi_k=0$ for $k<N_0$. The full residual
+  is in general an infinite series; the tail $k>N_{\rm res}$ is bounded
+  separately (`xi_tails`). Also stores `fapprox` (the $f^{\rm ap}_m$),
+  `term_pp`, `term_qq`.
 
-**`cert_eval.py`** - ball substitution and certified norms (the only place
-intervals enter the norms).
-- `make_balls`, `eval_coeff`, `eval_series` - enclose $K$-coefficients at the
-  ball point, raising on a denominator that contains $0$ (so bisection stays
-  honest).
-- `L_bound` - the contraction constant $\ell$ from the **analytic** sup-bounds
-  (Lemmas `lem:sup:00`, `lem:sup:-1`): $\ell\le \tfrac4{N_0}+\tfrac8{N_0(N_0-1)}$ at $z=0$,
-  $\ell\le \tfrac8{N_0}+\tfrac{16}{N_0(N_0-1)}$ at $z=+1$. (No Cauchy tail is needed for
-  $\ell$.)
-- `rational_M_p1`, `rational_M_00` - the Cauchy sup-bounds $M_p(\rho),M_q(\rho)$
+**`cert_eval.py`** - bounds of Appendix `sec:appendix:errors`.
+- `L_bound` - the contraction constant $\ell$ from Lemmas `lem:sup:00`,
+  `lem:sup:-1`: $\ell\le \tfrac4{N_0}+\tfrac8{N_0(N_0-1)}$ at $z=0$,
+  $\ell\le \tfrac8{N_0}+\tfrac{16}{N_0(N_0-1)}$ at $z=1$ ($N_0\ge10$). Valid for
+  $\theta\in(0,1)$ and $\lambda\in\{\tfrac{56}{100},\tfrac{60}{100}\}$ only.
+- `rational_M_p1`, `rational_M_00` - $M_p(\rho),M_q(\rho)$
   (Lemmas `lem:cau:Mbound:m1`, `lem:cau:Mbound:00`).
-- `fapprox_norms` - $C_{\mathrm{val}}, C_{\mathrm{der}}$ (Lemma `lem:tails:xi`).
-- `xi_tails` - the $k>N_{\mathrm{res}}$ Cauchy tails of the residual norms
-  (Lemma `lem:tails:xi`).
-- `norm_AN0`, `norm_deriv` - the finite parts ($N_0\le k\le N_{\mathrm{res}}$) of
-  the residual norms (Lemma `lem:sec_ord:LS`).
-- `delta_block` - the per-function $(\delta_f,\delta'_f)$ from `appB:Linfbound` /
-  `appB:Eprimebound`.
+- `forcing_M` - $M_g(\rho)$ of the normalized forcing
+  (Lemma `lem:forcing:Mbound`); $M_g=0$ for $\phi_1$.
+- `fapprox_norms` - $C_{\mathrm{val}}, C_{\mathrm{der}}$.
+- `xi_tails` - the tails $k>N_{\rm res}$ (Lemma `lem:tails:xi`): with
+  $S=M_pC_{\rm der}+M_qC_{\rm val}+M_g$ and $r=b_0/\rho$,
+  $\dfrac{S}{N_{\rm res}(N_{\rm res}+1)b_0^{N_0}}\dfrac{r^{N_{\rm res}+1}}{1-r}$
+  and $\dfrac{S}{N_{\rm res}b_0}\dfrac{r^{N_{\rm res}+1}}{1-r}$.
+- `norm_AN0`, `norm_deriv` - the finite parts ($N_0\le k\le N_{\mathrm{res}}$).
+- `delta_block` - the per-function $(\delta_f,\delta'_f)$ (Lemma
+  `lem:delta-cert`).
+- `make_balls`, `eval_coeff`, `eval_series` - direct ball evaluation; not used
+  by the proof.
+
 **`cert_det_post.py`** - certified enclosure of $\det M_{\lambda,\theta}$ over a
-$\theta$-ball, via **Taylor models** in $t=\theta-\theta_{\mathrm{mid}}$ built
-from each entry's exact numerator/denominator (so the determinant cancellation
-happens in $\mathbb{Q}$, before intervals).
-- `delta_per_function` - per-`(point, branch, fn)` truncation bounds
-  $\big(\delta_f,\delta'_f\big)$, enclosed with the tight num/den magnitude
-  (`eval_series_tight`) to avoid interval wrapping.
+$\theta$-ball, via Taylor models of order one in $t=\theta-\theta_{\mathrm{mid}}$
+built from each entry's exact numerator/denominator. The exact rational Taylor
+coefficients are enclosed as balls before the determinant is expanded.
+- `eval_series_tight` - centered balls of the magnitude of each coefficient over
+  the $\theta$-ball, from exact num/den coefficients.
+- `delta_per_function` - per-`(point, branch, fn)` bounds
+  $(\delta_f,\delta'_f)$. Checks $0<b_0<\rho<1$ and that the branch parameter
+  stays in $[0,1]$; bounds $\theta(2-\theta)$ and $1-\theta^2$ by monotonicity
+  for `forcing_M`.
 - `TM`, `_tm_det`, `_entry_tm` - the Taylor-model class, cofactor determinant,
   and per-entry model.
-- `_radius_matrix` - per-entry truncation radii, in the layout of
-  `symbolic_matrix_A`.
-- `build_post` - the truncated symbolic matrix $M^{\rm ap}$ ($=$
+- `_radius_matrix` - per-entry radii, in the layout of `symbolic_matrix_A`.
+- `build_post` - the truncated matrix $M^{\rm ap}$ ($=$
   `symbolic_matrix_A(N0-1)`).
 - `certified_det_post` - the certified `RealBall` containing
-  $\det M_{\lambda,\theta}$ for all $\theta$ in the ball: Taylor-model
-  determinant plus a Hadamard-style perturbation
-  $\prod_i(S_i+\rho_i)-\prod_i S_i$ for the truncation gap.
+  $\det M_{\lambda,\theta}$ on the ball: Taylor-model determinant plus
+  $\prod_i(S_i+\rho_i)-\prod_i S_i$ for the truncation gap (entry radii:
+  Corollary `cor:matrix-enclose`; bound on the determinant gap: proof of
+  Lemma `lem:negposjump`).
 
-**`cert_proof.py`** - top-level drivers.
-- `verify_det_sign` - certifies $\mathrm{sign}\cdot\det M_{\lambda,\theta}>0$ for
-  all $\theta\in[\theta_{\mathrm{lo}},\theta_{\mathrm{hi}}]$ by adaptive
-  bisection (accept / refine on undecided sign or pole straddle / raise on wrong
-  sign).
-- `prove(N, ...)` - the full theorem. Prime-divisor reduction (it suffices to
-  treat prime $n$): primes $p<N$ are checked at the single point
-  $\theta_p=\tfrac{h_p}p$; all primes $p\ge N$ are covered at once on the interval
-  $J=\big[c\pm\tfrac1{2q}\big]$ of length $\tfrac1q$, where $c$ is `center` and $q$ is the smallest prime
-  $\ge N$.
+**`cert_proof.py`** - driver.
+- `verify_det_sign` - certifies $\mathrm{sign}\cdot\det M_{\lambda,\theta}>0$ on
+  $[\theta_{\mathrm{lo}},\theta_{\mathrm{hi}}]$ by adaptive bisection (accept /
+  refine on undecided sign or failed enclosure / raise on wrong sign or below the
+  minimum width). Before that it checks $\ell<1$ in both charts and probes a few
+  points; an undecided point raises an error naming `N0` and `bits`.
+- `prove(N, ...)` - primes $p<N$ at $\theta_p=h_p/p$ (`theta_of`: $h_p$ nearest
+  $p\cdot$`center`, clipped to $[\lceil p/3\rceil,\lfloor p/2\rfloor]$); primes
+  $p\ge N$ on $J=[\texttt{center}\pm\tfrac1{2p^\ast}]$, of length $\tfrac1{p^\ast}$.
 
-### Auxiliary (not needed for the proof)
+### Driver and sanity checks
+
+`run_proof.py` is the entry point that reproduces the certificate; the proof
+itself is `cert_proof.prove`.
 
 | File | Purpose |
 |---|---|
-| `verify_residuals.py` | Exact-layer sanity checks: term counts, residual support ($\xi_k=0$ for $k<N_0$), and truncation stability across $N_{\mathrm{res}}$. |
-| `run_proof.py` | Convenience runner that first calls `run_sanity` at `lambda = DEFAULT_LAM_LOW`, then `prove`, with timings. |
+| `verify_residuals.py` | Exact-layer sanity checks: term counts, $\xi_k=0$ for $k<N_0$, and agreement of the stored coefficients across two values of $N_{\mathrm{res}}$. |
+| `run_proof.py` | Runs `run_sanity` at $\lambda=\tfrac{56}{100}$ only, then `prove` at both values of $\lambda$. |
 
 ## Parameters
 
-| Name | Meaning | Default / constraint |
+| Name | Meaning | Value in `run_proof.py` |
 |---|---|---|
-| `N0` | matching / truncation order of $f^{\rm ap}$ | Default: `31`; constraint: $N_0\ge 10$ at $z=+1$, $N_0\ge 6$ at $z=0$ |
-| `Nres` | residual order, $N_{\mathrm{res}}>N_0$ | $2N_0$ |
-| `N` | prime-split threshold | No function default; theorem run uses `900`, with $p^\ast=\texttt{next\_prime}(N-1)=907$ |
-| `center` | theta midpoint for point checks and interval $J$ | Default: $\tfrac{5}{12}$ |
+| `N` | prime threshold | `900`; $p^\ast=\texttt{next\_prime}(N-1)=907$ |
+| `center` | target of $\theta_p$ and centre of $J$ | $\tfrac{5}{12}$ |
+| `N0` | truncation order of $f^{\rm ap}$; $N_0\ge10$ | `31` |
+| `Nres` | last stored residual index, $N_{\mathrm{res}}\ge N_0$ | $2N_0=62$ |
 | `bits` | `RealBallField` precision | `200` |
-| `rho` | Cauchy radius $\rho\in\big(\tfrac12,1\big)$ | $\tfrac34$ |
-| `b0` | local evaluation point ($z=x_0=-\tfrac12 \leftrightarrow x=\tfrac12$) | $\tfrac12$ |
+| `rho` | Cauchy radius, $b_0<\rho<1$ | $\tfrac34$ |
+| `b0` | matching point in the local coordinate | $\tfrac12$ |
+| `lam_low`, `lam_upp` | the two values of $\lambda$ | $\tfrac{56}{100}$, $\tfrac{60}{100}$ |
+
+With these values $J=[\tfrac{5}{12}-\tfrac1{1814},\tfrac{5}{12}+\tfrac1{1814}]$.
 
 ## Notes on rigor
 
-* The exact layer carries no intervals. Ball arithmetic enters in two places:
-  `cert_eval.py` computes the per-function truncation bounds
-  $(\delta_f,\delta'_f)$, and `cert_det_post.py` encloses the matrix entries and
-  determinant via Taylor models.
-* The proof uses the tight `certified_det_post` based on Taylor models and
-  per-function bounds $(\delta_f,\delta'_f)$, propagated entry-wise to the
-  matrix.
-* The contraction constant $\ell$ uses the analytic sup-bounds of Lemmas
-  `lem:sup:00` and `lem:sup:-1`, which are taken over the real interval
-  $x\in\big[0,\tfrac12\big]$.
+* The exact layer carries no intervals. Balls enter in `eval_series_tight` and
+  the Taylor models of `cert_det_post.py`; `cert_eval.py` combines them into
+  $(\delta_f,\delta'_f)$.
+* The residual bound is the exact finite sum up to $N_{\rm res}$ plus the
+  Cauchy tail of Lemma `lem:tails:xi`, which includes the forcing term $M_g$.
+* The contraction constant $\ell$ uses Lemmas `lem:sup:00` and `lem:sup:-1`,
+  sup-bounds over $x\in\big[0,\tfrac12\big]$.
+
+## Status
+
+Executed with SageMath 10.9 (conda environment, Python of that environment):
+`run_proof.py` passes (N=900, 154 primes plus J, about 32 s).

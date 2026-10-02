@@ -13,10 +13,13 @@ from cert_proof import (
 from verify_residuals import run as run_sanity
 
 # run_proof.py
+#
+# Exact sanity checks (at lambda = 56/100 only), then the certificate of
+# Lemma lem:negposjump at lambda = 56/100 and 60/100.
 
 
 if __name__ == "__main__":
-    N = 900
+    N = 900          # prime threshold; p* = next_prime(N-1) = 907
     N0 = DEFAULT_N0
     Nres = default_nres(N0)
     run_sanity(N0=N0, Nres=Nres, lam_value=DEFAULT_LAM_LOW)

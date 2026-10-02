@@ -8,8 +8,9 @@ from sage.all import *
 #
 # Orders.  The matrix uses the order-N0 truncation f^ap (coefficients 0..N0-1).
 # The residual xi = double integral of (g - L[f^ap]) / x^2  (def:appB:R) is
-# computed up to coefficient Nres > N0.  Since f_ap matches the exact solution to
-# order N0, xi vanishes exactly for k < N0 and is supported on N0 <= k <= Nres.
+# in general an infinite series.  Since f^ap matches the exact solution to order
+# N0, xi_k = 0 for k < N0.  Only the coefficients through Nres >= N0 are stored;
+# the tail k > Nres is bounded by cert_eval.xi_tails (Lemma lem:tails:xi).
 #
 # Besides xi, each block also stores the data the tail estimates of Appendix B
 # need: the specialized coefficient vectors term_pp = (c^p_i), term_qq = (c^q_j)
@@ -20,10 +21,10 @@ from local_fuchs import (
     default_parameter_matrices,
     specialize_terms,
     local_coeffs_at_p1,
-    local_coeffs_at_0p,
+    local_coeffs_at_0,
     hom_sol_fro_const,
-    particular_sol_recurrence,
-    construct_solutions_when_diff_is_integer_formal,
+    particular_sol_ordinary_direct,
+    particular_sol_r1_is_0_direct,
     _apply_operator_r,
 )
 
@@ -42,28 +43,28 @@ def _fapprox(ctx, f, N0):
     return [f[m] for m in range(N0)]
 
 
+def _defect_vanishes(ctx, z):
+    """z == 0 (exact mode), or every ball component of z contains 0 (ball mode)."""
+    if not ctx.get("ball"):
+        return z == ctx["K"](0)
+    try:
+        L = z.lift().list()
+    except AttributeError:
+        L = [z]
+    return all(c.contains_zero() for c in L) if L else True
+
+
 def _residual_of(ctx, f_full, N0, P, Q, G_list=None):
-    """Residual xi[k] = (g - L[f^ap])[k] / (k(k-1)) of the order-N0 truncation f^ap."""
+    """
+    xi[0..Nres] of the order-N0 truncation f^ap, xi[k] = (g - L[f^ap])[k] / (k(k-1)).
+    The coefficients k > Nres are not zero in general; they are bounded separately.
+    """
     K, N = ctx["K"], ctx["N"]
     f_approx = _truncate(ctx, f_full, N0)
     D = _apply_operator_r(ctx, f_approx, K(0), P, Q, G_list=G_list)
-    if ctx.get("ball"):
-        # over balls the structural zeros become small balls; check containment
-        def _rb_contains_zero(elem):
-            try:
-                return elem.lift()[0].contains_zero()
-            except Exception:
-                try:
-                    return elem.contains_zero()
-                except Exception:
-                    return False
-        assert _rb_contains_zero(D[0]) and _rb_contains_zero(D[1]), (
-            "residual defect does not vanish at orders 0 and 1 -- matching condition violated"
-        )
-    else:
-        assert D[0] == K(0) and D[1] == K(0), (
-            "residual defect does not vanish at orders 0 and 1 -- matching condition violated"
-        )
+    assert _defect_vanishes(ctx, D[0]) and _defect_vanishes(ctx, D[1]), (
+        "residual defect does not vanish at orders 0 and 1 -- matching condition violated"
+    )
     xi = [K(0)] * (N + 1)
     for k in range(2, N + 1):
         xi[k] = D[k] / (K(k) * K(k - 1))
@@ -72,7 +73,7 @@ def _residual_of(ctx, f_full, N0, P, Q, G_list=None):
 
 def residuals_at_p1(ctx, term_pp, term_qq, term_a1, term_a2, N0, sol_order=None):
     """
-    Functions at z=+1 entering Mcrit: the holomorphic Frobenius solution phi1
+    Functions at z=1 entering Mcrit: the holomorphic Frobenius solution phi1
     (root r=0) and the two particular solutions fp1, fp2.  All are holomorphic,
     so the residual operator uses r=0.  (The singular branch, exponent 2-lambda,
     is the excluded one.)
@@ -81,8 +82,10 @@ def residuals_at_p1(ctx, term_pp, term_qq, term_a1, term_a2, N0, sol_order=None)
     P, Q, A1, A2 = local_coeffs_at_p1(ctx, term_pp, term_qq, term_a1, term_a2)
     r1 = K(0)
     phi1 = hom_sol_fro_const(ctx, r1, P, Q, sol_order=sol_order)
-    fp1 = particular_sol_recurrence(ctx, P, Q, A1)
-    fp2 = particular_sol_recurrence(ctx, P, Q, A2)
+    # Only coefficients 0..N0-1 enter f^ap.
+    top = ctx["N"] if sol_order is None else min(ctx["N"], sol_order - 1)
+    fp1 = particular_sol_r1_is_0_direct(ctx, A1, P, Q, top)
+    fp2 = particular_sol_r1_is_0_direct(ctx, A2, P, Q, top)
     return {
         "phi1": _residual_of(ctx, phi1, N0, P, Q, G_list=None),
         "fp1":  _residual_of(ctx, fp1,  N0, P, Q, G_list=A1),
@@ -103,16 +106,14 @@ def residuals_at_00(ctx, term_pp, term_qq, term_a1, term_a2, N0, th, sol_order=N
     """
     Functions at z=0 entering Mcrit: fp1, fp2 (both holomorphic).  The dominant
     Frobenius solution phi1 ~ x^{1-theta} does not appear in the matrix, so only
-    the particular solutions are needed.  Expansion toward z=+1 (z=+x, no flip).
+    the particular solutions are needed.  Local variable x = z (no flip).
     """
-    K = ctx["K"]
-    P, Q, A1, A2 = local_coeffs_at_0p(
+    P, Q, A1, A2 = local_coeffs_at_0(
         ctx, term_pp, term_qq, term_a1, term_a2
     )
-    r1 = K(1) - th
-    phi1, phi2, fp1, fp2, C = construct_solutions_when_diff_is_integer_formal(
-        ctx, r1, ZZ(2), P, Q, A1, A2, sol_order=sol_order
-    )
+    top = ctx["N"] if sol_order is None else min(ctx["N"], sol_order - 1)
+    fp1 = particular_sol_ordinary_direct(ctx, A1, P, Q, top)
+    fp2 = particular_sol_ordinary_direct(ctx, A2, P, Q, top)
     return {
         "fp1": _residual_of(ctx, fp1, N0, P, Q, G_list=A1),
         "fp2": _residual_of(ctx, fp2, N0, P, Q, G_list=A2),
@@ -133,27 +134,25 @@ MATRIX_FUNCS = {"p1": ["phi1", "fp1", "fp2"], "00": ["fp1", "fp2"]}
 
 def all_res_sym(Nres, N0, lam_value=None, the_value=None, ball=None, bits=200):
     """
-    Every matrix-relevant residual series, exact in (theta, lambda).
+    Coefficients 0..Nres of every matrix-relevant residual, exact in (theta, lambda).
 
     lam_value : fix lambda to this rational (univariate, faster), or None to keep
                 it symbolic.
-    the_value : fix theta to this rational and keep lambda symbolic (univariate in
-                lambda) -- the cheap pass for the simplicity gap, no bivariate OOM.
-    ball      : (theta_ball, lam_ball) -> route-A dual-number-over-balls context
-                (lambda = lam_ball + eps, eps^2=0); residual coefficients come out as
-                duals whose eps^0 part is the value and eps^1 part the d/dlambda, both
-                enclosed over the (theta,lambda) box.
+    the_value : fix theta to this rational and keep lambda symbolic.  Not used
+                by the proof.
+    ball      : (theta_ball, lam_ball) -> optional dual-number-over-balls context
+                (see local_fuchs.make_symbolic_context).  Not used by the proof.
 
-    The Frobenius recursion is stopped at order N0 (sol_order=N0): the residual
-    only reads f^ap up to N0-1, so this is exact and drops the costly high-order
-    Frobenius coefficients.
+    The Frobenius recurrences are stopped at degree N0-1 (sol_order=N0): the
+    residual only reads f^ap up to N0-1, so this is exact.
 
     Returns {"p1": {"the": blk, "eht": blk}, "00": {...}, plus metadata}, where
-    each blk maps a function name to its xi list and carries "fapprox", "term_pp",
-    "term_qq", "_P", "_Q".
+    each blk maps a function name to its xi list (indices 0..Nres) and carries
+    "fapprox", "term_pp", "term_qq", "_P", "_Q".  The tail k > Nres is bounded
+    when these data are evaluated (cert_eval.xi_tails).
     """
-    if not (Nres > N0):
-        raise ValueError("Nres must be strictly greater than N0")
+    if not (Nres >= N0):
+        raise ValueError("Nres must be at least N0")
     ctx = make_symbolic_context(Nres, lam_value=lam_value, the_value=the_value,
                                 ball=ball, bits=bits)
     K = ctx["K"]

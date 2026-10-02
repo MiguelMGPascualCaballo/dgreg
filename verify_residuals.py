@@ -2,7 +2,7 @@ from sage.all import *
 
 # verify_residuals.py
 #
-# Sanity checks for the exact residual pipeline, in the spirit of BHTW's verify.py:
+# Sanity checks for the exact residual pipeline:
 # fail loudly, never silently.  A truncated power series forgets its tail, so the
 # point here is to confirm we really are carrying the intended number of terms of
 # every approximate solution f_approx and of every residual xi.
@@ -85,9 +85,7 @@ def check_truncation_stable(N0, Nres_low, Nres_high, lam_value=None):
 
 
 def run(N0=6, Nres=None, lam_value=None):
-    """All exact-layer sanity checks.  These probe the pipeline logic, which is
-    N0-independent, so a small N0 keeps them cheap; scale N0 upward for the
-    actual certified bounds."""
+    """All exact-layer sanity checks of the residual pipeline."""
     if Nres is None:
         Nres = 2 * N0
     print("--- verify_residuals (N0=%d, Nres=%d, lam=%s) ---"

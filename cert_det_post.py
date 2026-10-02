@@ -12,7 +12,8 @@ from sage.all import *
 #   * Evaluating N/D over the ball by Horner still wraps when N, D have large
 #     cancelling coefficients -- and more bits does NOT fix that.  Here the Taylor
 #     coefficients of m come from the EXACT power series N(c+t)/D(c+t) over QQ
-#     (no intervals, no cancellation); intervals enter only at the very end.
+#     (no intervals, no cancellation); they are enclosed in balls before the
+#     Taylor-model arithmetic.
 #
 # Entry Taylor model (order k) about theta = c, on |t| <= r:
 #   coefficients a_0..a_k = series of N(c+t)/D(c+t) to order k  (exact, in QQ);
@@ -20,14 +21,13 @@ from sage.all import *
 #   H(t) = (N(c+t) - P(t) D(c+t)) / t^{k+1},  P = sum a_l t^l, all from exact
 #   coefficients (sup|H| = sum|H_l| r^l, inf|D| = |D(c)| - sum_{l>=1}|D_l| r^l).
 #
-# The determinant is then formed by Taylor-model arithmetic, so its t^0, t^1
-# coefficients (det and d/dtheta det) are tight -- the determinant cancellation is
-# done in the polynomial product.  The truncation gap M^ap -> M_true is added in
-# magnitude (Hadamard, per-entry radii); no derivative of the true solution, hence
-# no f_theta tail, is used.
+# The determinant is then formed by Taylor-model arithmetic.  The truncation gap
+# M^ap -> Mcrit is added in magnitude from the per-entry radii (Corollary
+# cor:matrix-enclose) and the row sums; the determinant gap is bounded as in the
+# proof of Lemma lem:negposjump.  No derivative of the true solution is used.
 
 from local_fuchs import symbolic_matrix_A
-from cert_eval import rational_M_p1, rational_M_00, delta_block
+from cert_eval import rational_M_p1, rational_M_00, forcing_M, delta_block
 
 
 # -----------------------------------------------------------------------------
@@ -209,32 +209,45 @@ def delta_per_function(all_res, bits, theta_mid, theta_rad, lam_value, lam_rad=0
     The residual coefficients are enclosed over the theta-ball with the tight
     num/den bound (eval_series_tight), not eval_coeff: otherwise their interval
     wrapping grows like r and swamps delta* (whereas the true truncation error is
-    tiny at large N0).
+    tiny at large N0).  The forcing bound M_g uses upper bounds of theta(2-theta)
+    and 1-theta^2 over the branch parameter range.
     """
     RB = RealBallField(bits)
     c = QQ(theta_mid)
     r_rat = QQ(theta_rad)
     Pt = PolynomialRing(QQ, "t")
-    b0 = RB(QQ(b0))
-    rho = RB(QQ(rho))
+    b0_rat, rho_rat = QQ(b0), QQ(rho)
+    if not (0 < b0_rat < rho_rat < 1):
+        raise ValueError("Cauchy radius must satisfy 0 < b0 < rho < 1")
+    b0 = RB(b0_rat)
+    rho = RB(rho_rat)
     N0, Nres = all_res["_N0"], all_res["_Nres"]
     out = {}
     for point in ["p1", "00"]:
         for branch in ["the", "eht"]:
             blk = all_res[point][branch]
+            t_lo, t_hi = ((c - r_rat, c + r_rat) if branch == "the"
+                          else (1 - c - r_rat, 1 - c + r_rat))
+            if not (0 <= t_lo <= t_hi <= 1):
+                raise ValueError("branch parameter must lie in [0, 1]")
+            # t(2-t) increases and 1-t^2 decreases on [0, 1].
+            a_upper = RB(t_hi * (2 - t_hi))
+            b_upper = RB(1 - t_lo**2)
             cp = eval_series_tight(blk["term_pp"], c, lam_value, r_rat, RB, Pt)
             cq = eval_series_tight(blk["term_qq"], c, lam_value, r_rat, RB, Pt)
             Mp, Mq = _RATIONAL_M[point](cp, cq, rho)
             for fn in _FN_KEYS[point]:
                 xi_RB = eval_series_tight(blk[fn], c, lam_value, r_rat, RB, Pt)
                 ft_RB = eval_series_tight(blk["fapprox"][fn], c, lam_value, r_rat, RB, Pt)
-                dv, dd, _ = delta_block(point, xi_RB, ft_RB, Mp, Mq, N0, Nres, b0, rho)
+                Mg = forcing_M(point, fn, a_upper, b_upper, rho)
+                dv, dd, _ = delta_block(point, xi_RB, ft_RB, Mp, Mq, Mg,
+                                        N0, Nres, b0, rho)
                 out[(point, branch, fn)] = (dv, dd)
     return out
 
 
 def _radius_matrix(dpf, RB):
-    """Per-entry radii r_ij, following symbolic_matrix_A's layout A = A_p1 - A_0p."""
+    """Per-entry radii r_ij, following symbolic_matrix_A's layout A = A_p1 - A_00."""
     v = lambda p, b, f: RB(dpf[(p, b, f)][0].upper())
     d = lambda p, b, f: RB(dpf[(p, b, f)][1].upper())
     Z = RB(0)

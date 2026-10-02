@@ -2,16 +2,19 @@ from sage.all import *
 
 # cert_eval.py
 #
-# Numeric layer.  Takes the exact residual series of cert_residuals and substitutes
-# (theta, lambda) as RealBallField elements, then assembles the certified bounds
-# delta, delta' of Lemma lem:sec_ord:LS.  This is the ONLY place ball arithmetic
-# enters.
+# Bounds of Appendix sec:appendix:errors on ball inputs.  The exact residual data
+# of cert_residuals are enclosed over a theta-ball by
+# cert_det_post.eval_series_tight; this module turns those enclosures into the
+# bounds delta, delta' of Lemma lem:delta-cert.
 #
-# The residual norms are rigorous: a finite sum of the exact coefficients up to
-# Nres (norm_AN0 / norm_deriv) plus the Cauchy tail k > Nres (xi_tails), following
-# Lemma lem:tails:xi.  The contraction constant ell comes from the analytic
-# sup-bounds of Lemmas lem:sup:00 and lem:sup:-1 (L_bound), so no tail is needed
-# for ell.
+# The residual norms are a finite sum of the exact coefficients up to Nres
+# (norm_AN0 / norm_deriv) plus the Cauchy tail k > Nres (xi_tails), which
+# includes the normalized forcing bound M_g (forcing_M), following Lemmas
+# lem:forcing:Mbound and lem:tails:xi.  The contraction constant ell comes from
+# Lemmas lem:sup:00 and lem:sup:-1 (L_bound).
+#
+# make_balls, eval_coeff and eval_series are direct ball evaluations; the proof
+# does not call them.
 
 
 # -----------------------------------------------------------------------------
@@ -46,10 +49,8 @@ def eval_coeff(c, the_b, lam_b, RB, label=None):
     """
     Enclose one Frac(QQ[the, lam]) coefficient at the ball point.
 
-    A denominator ball that contains zero means the (theta, lambda) box straddles
-    a pole of this coefficient; we raise so the caller can subdivide theta.  Note
-    RBF would silently return a NaN/inf ball here and compare False later, so the
-    explicit check is what keeps the bisection honest.
+    Raises if the denominator ball contains zero (RBF would otherwise return a
+    non-finite ball).
     """
     nb = _eval_poly(c.numerator(), the_b, lam_b, RB)
     db = _eval_poly(c.denominator(), the_b, lam_b, RB)
@@ -72,15 +73,14 @@ def L_bound(point, N0):
     """
     Contraction constant ell of (appB:L) from the analytic sup-bounds:
         z=0   ||p|| < 4,  ||x p' - p - q|| < 8   ->  ell <= 4/N0 + 8/(N0(N0-1))
-        z=-1  ||p|| <= 8, ||x p' - p - q|| <= 24 ->  ell <= 8/N0 + 24/(N0(N0-1)).
-    Valid for theta in (0, 1) and lambda in {56/100, 60/100}, which is the
-    parameter domain used in the proof. On that domain the bound is uniform, so
-    this is an exact rational and no ball is needed for it.
+        z=1   ||p|| <= 8, ||x p' - p - q|| <= 16 ->  ell <= 8/N0 + 16/(N0(N0-1)).
+    Valid for theta in (0, 1) and lambda in {56/100, 60/100} only; there it is
+    uniform, so it is an exact rational.
     """
     if point == "00":
         c1, c2 = QQ(4), QQ(8)       # valid for N0 >= 6
     elif point == "p1":
-        c1, c2 = QQ(8), QQ(16)      # valid for N0 >= 10 (z=+1; see lem:sup:-1)
+        c1, c2 = QQ(8), QQ(16)      # valid for N0 >= 10 (lem:sup:-1)
     else:
         raise ValueError("point must be '00' or 'p1'")
     return c1 / N0 + c2 / (N0 * (N0 - 1))
@@ -91,12 +91,7 @@ def L_bound(point, N0):
 # -----------------------------------------------------------------------------
 
 def rational_M_p1(cp, cq, rho):
-    """M_p(rho), M_q(rho) at z=+1 from cp = (c^p_0, c^p_1, c^p_2), cq = (c^q_0..c^q_3).
-
-    Mirror of rational_M_m1 under z -> -z: at z=+1 the leading (indicial) residue is
-    1/(z-1) -- index 1 in cp, index 2 in cq -- while the pole at distance 2 is now
-    1/(z+1) -- index 2 in cp, index 3 in cq.  The pole at distance 1 (1/z) is index 0.
-    """
+    """M_p(rho), M_q(rho) at z=1 from cp = (c^p_0, c^p_1, c^p_2), cq = (c^q_0..c^q_3)."""
     Mp = abs(cp[1]) + rho * (abs(cp[0]) / (1 - rho) + abs(cp[2]) / (2 - rho))
     Mq = (abs(cq[2]) * rho
           + rho**2 * (abs(cq[0]) / (1 - rho)
@@ -110,6 +105,24 @@ def rational_M_00(cp, cq, rho):
     Mp = abs(cp[0]) + rho * (abs(cp[1]) + abs(cp[2])) / (1 - rho)
     Mq = abs(cq[1]) + abs(cq[0]) * rho + rho**2 * (abs(cq[2]) + abs(cq[3])) / (1 - rho)
     return Mp, Mq
+
+
+def forcing_M(point, fn, a, b, rho):
+    """
+    M_g(rho) of Lemma lem:forcing:Mbound, with a >= theta(2-theta) and
+    b >= 1-theta^2 = (1-theta)(1+theta); M_g = 0 for phi1.
+    """
+    if fn == "phi1":
+        return rho.parent()(0)
+    if point == "00" and fn == "fp1":
+        return a * rho / (1 - rho**2)
+    if point == "00" and fn == "fp2":
+        return b / (1 - rho**2)
+    if point == "p1" and fn == "fp1":
+        return a * rho / ((1 - rho) * (2 - rho))
+    if point == "p1" and fn == "fp2":
+        return b * rho / ((1 - rho)**2 * (2 - rho))
+    raise ValueError("unknown local forcing: %s, %s" % (point, fn))
 
 
 # -----------------------------------------------------------------------------
@@ -146,18 +159,18 @@ def fapprox_norms(fapprox_RB, rho):
     return C_val, C_der
 
 
-def xi_tails(Mp, Mq, C_val, C_der, N0, Nres, b0, rho):
+def xi_tails(Mp, Mq, Mg, C_val, C_der, N0, Nres, b0, rho):
     """
     Cauchy tails k > Nres of ||xi||_{A_N0} and ||d/dx xi||_{Linf} (Lemma lem:tails:xi):
-        S = Mp C_der + Mq C_val,   r = b0/rho,
-        tail_val = S / b0^N0 * r^{Nres+1} / (1-r),
-        tail_der = S / b0     * r^{Nres+1} / (1-r).
+        S = Mp C_der + Mq C_val + Mg,   r = b0/rho,
+        tail_val = S / (Nres (Nres+1) b0^N0) * r^{Nres+1} / (1-r),
+        tail_der = S / (Nres b0)             * r^{Nres+1} / (1-r).
     """
-    S = Mp * C_der + Mq * C_val
+    defect_bound = Mp * C_der + Mq * C_val + Mg
     r = b0 / rho
     geom = r**(Nres + 1) / (1 - r)
-    tail_val = S / b0**N0 * geom
-    tail_der = S / b0 * geom
+    tail_val = defect_bound / (Nres * (Nres + 1) * b0**N0) * geom
+    tail_der = defect_bound / (Nres * b0) * geom
     return tail_val, tail_der
 
 
@@ -165,7 +178,7 @@ def xi_tails(Mp, Mq, C_val, C_der, N0, Nres, b0, rho):
 # delta, delta' per function
 # -----------------------------------------------------------------------------
 
-def delta_block(point, xi_RB, fapprox_RB, Mp, Mq, N0, Nres, b0, rho):
+def delta_block(point, xi_RB, fapprox_RB, Mp, Mq, Mg, N0, Nres, b0, rho):
     """Per-function (delta_val, delta_der, ell) from (appB:Linfbound)/(appB:Eprimebound), M=b0."""
     RB = b0.parent()
     ell = RB(L_bound(point, N0))
@@ -173,7 +186,7 @@ def delta_block(point, xi_RB, fapprox_RB, Mp, Mq, N0, Nres, b0, rho):
         raise ValueError("contraction ell < 1 not certified at %s (N0=%d): ell = %s"
                          % (point, N0, ell))
     C_val, C_der = fapprox_norms(fapprox_RB, rho)
-    tail_val, tail_der = xi_tails(Mp, Mq, C_val, C_der, N0, Nres, b0, rho)
+    tail_val, tail_der = xi_tails(Mp, Mq, Mg, C_val, C_der, N0, Nres, b0, rho)
     nR  = norm_AN0(xi_RB, N0, Nres, b0) + tail_val
     nRp = norm_deriv(xi_RB, N0, Nres, b0) + tail_der
     M = b0
