@@ -10,7 +10,7 @@ $$\det M_{\lambda,\theta} < 0 \quad\text{at } \lambda=\tfrac{56}{100},
 at the point $\theta_p=h_p/p$ for every prime $p<N=900$, and uniformly on
 
 $$J=\Big[\tfrac5{12}-\tfrac1{2p^\ast},\ \tfrac5{12}+\tfrac1{2p^\ast}\Big],
-\qquad p^\ast=\texttt{next\_prime}(N-1)=907,$$
+\qquad p^\ast=907,$$
 
 for the primes $p\ge N$ (Lemma `lem:cover`). The sign change yields, by the
 intermediate value theorem, an eigenvalue $\lambda_\theta\in(0.56,0.60)$ of
@@ -188,7 +188,7 @@ itself is `cert_proof.prove`.
 
 | Name | Meaning | Value in `run_proof.py` |
 |---|---|---|
-| `N` | prime threshold | `900`; $p^\ast=\texttt{next\_prime}(N-1)=907$ |
+| `N` | prime threshold | `900`; $p^\ast=907$ is the smallest prime $\ge N$ (`next_prime(N-1)`) |
 | `center` | target of $\theta_p$ and centre of $J$ | $\tfrac{5}{12}$ |
 | `N0` | truncation order of $f^{\rm ap}$; $N_0\ge10$ | `31` |
 | `Nres` | last stored residual index, $N_{\mathrm{res}}\ge N_0$ | $2N_0=62$ |
