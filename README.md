@@ -71,9 +71,9 @@ Parameters (`cert_proof.py`, `run_proof.py`):
 
 | Module | Contents |
 |---|---|
-| `cert_bloch.py` | `certify_maxeig_below`: interval $LDL^\top$ test for $\max\operatorname{eig}(S)<\mu$. The other routines (`certify_A`, `certify_B`, `certify_eigenpair`, `certify_theta`, ...) are not used. |
+| `cert_bloch.py` | `certify_maxeig_below`: interval $LDL^\top$ test for $\lambda_{\max}(S)<\mu$. The other routines (`certify_A`, `certify_B`, `certify_eigenpair`, `certify_theta`, ...) are not used. |
 | `cert_near_0.py` | Part (i): `certify_near_0_lmi`, `cover_near_0_region`. Operator $L^{{\rm fib}\,\Sigma}_{1,\theta}$ of Lemma `lem:rescaled:fiber` (homogeneous weight, mode 0 rescaled), $\gamma=\tfrac12(1+\tfrac1{64})$ (Lemma `lem:tm:tail:hom`); entries built exactly over $\mathrm{Frac}(\mathbb{Q}[\alpha])$, then evaluated at the ball. |
-| `cert_away_0.py` | Part (ii): `certify_away_0_lmi`, `cover_away_0_region`. Shifted weight $\sqrt{1+|k+\alpha|^2}$, $\gamma=\tfrac12(1+\tfrac3{16})$ (Lemma `lem:tm:tail`); entries built directly in ball arithmetic. |
+| `cert_away_0.py` | Part (ii): `certify_away_0_lmi`, `cover_away_0_region`. Shifted weight $\sqrt{1+\lvert k+\alpha\rvert^2}$, $\gamma=\tfrac12(1+\tfrac3{16})$ (Lemma `lem:tm:tail`); entries built directly in ball arithmetic. |
 | `run_h1_metrics.py` | Driver: $r=\tfrac{11}{10}$, 200 bits, $X=0$, $s=1$; $m=8$ on $(0,\tfrac{13}{40}]$, $m=4$ on $[\tfrac{13}{40},\tfrac12]$. `--smoke` runs the same full computation. |
 | `precomputed_near_0_X.py` | Matrix $X$ for the $s=2$ path of `cert_near_0.py` ($m=8$); not imported and not used by the certificates. |
 
